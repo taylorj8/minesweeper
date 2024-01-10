@@ -9,12 +9,22 @@ import System.IO.Unsafe (unsafePerformIO)
 -- cell can either be a bomb or a number representing surrounding bombs
 data Cell
     = Bomb Int
-    | Empty Int Int
-    deriving (Show)
+    | Empty Int Int 
+
+-- show B for bomb or number in empty cell
+instance Show Cell where
+    show (Bomb _) = "B"
+    show (Empty _ n) = show n
 
 -- board represented as a list of cells
 data Grid = Grid Int [Cell]
-    deriving (Show)
+
+-- show grid in 2D format
+instance Show Grid where
+    show (Grid n cells) = unlines $ map showRow rows
+        where
+            rows = [take n $ drop (i*n) cells | i <- [0..n-1]]
+            showRow = unwords . map show
 
 -- randomly select n indexes from a list of size m for placing bombs
 -- nub removes duplicates from the random number stream
@@ -25,6 +35,7 @@ randSelect n m = take n . nub $ randomRs (0, m-1) $ mkStdGen nanosSinceEpoch
         -- system time (converted to Int) used as seed for random number generator
         -- unsafePerformIO used to avoid returning IO Int
 
+test = floor . nominalDiffTimeToSeconds . utcTimeToPOSIXSeconds $ unsafePerformIO getCurrentTime
 
 -- place bombs at the given indices
 placeBombs :: Int -> [Int] -> Grid
@@ -52,8 +63,10 @@ countNeighbours n i cells = length $ filter isBomb neighbours
             _ -> False
 
 
+-- initialise the grid
+-- get list of bomb positions, place the bombs and find the surrounding bomb count for empty cells
 initGrid :: Int -> Int -> Grid
-initGrid size numBombs = countBombs $ placeBombs size $ randSelect numBombs size
+initGrid size numBombs = countBombs $ placeBombs size $ randSelect numBombs (size*size)
 
 -- given an index, return the indices of the surrounding cells
 findNeighbours :: Int -> Int -> [Int]
@@ -63,4 +76,3 @@ findNeighbours index n = handleEdges [index - n-1, index - n, index - n+1, index
         -- handles the case of edge cells
         -- if neigbour is out of bounds, remove it
         -- if neighbour is more than one column away, remove it
-
