@@ -1,0 +1,66 @@
+module Minesweeper where
+
+import System.Random (mkStdGen, randomRs)
+import Data.List (nub)
+import Data.Time (getCurrentTime, nominalDiffTimeToSeconds)
+import Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
+import System.IO.Unsafe (unsafePerformIO)
+
+-- cell can either be a bomb or a number representing surrounding bombs
+data Cell
+    = Bomb Int
+    | Empty Int Int
+    deriving (Show)
+
+-- board represented as a list of cells
+data Grid = Grid Int [Cell]
+    deriving (Show)
+
+-- randomly select n indexes from a list of size m for placing bombs
+-- nub removes duplicates from the random number stream
+randSelect :: Int -> Int -> [Int]
+randSelect n m = take n . nub $ randomRs (0, m-1) $ mkStdGen nanosSinceEpoch
+    where 
+        nanosSinceEpoch = floor . nominalDiffTimeToSeconds . utcTimeToPOSIXSeconds $ unsafePerformIO getCurrentTime
+        -- system time (converted to Int) used as seed for random number generator
+        -- unsafePerformIO used to avoid returning IO Int
+
+
+-- place bombs at the given indices
+placeBombs :: Int -> [Int] -> Grid
+placeBombs n bombIndices = Grid n (map placeBomb [0..n*n])
+    where
+        placeBomb index = if index `elem` bombIndices then Bomb index else Empty index 0
+
+
+-- for each empty cell, count the number of surrounding bombs
+countBombs :: Grid -> Grid
+countBombs (Grid n cells) = Grid n (map countBomb cells)
+    where
+        countBomb (Bomb i) = Bomb i
+        countBomb (Empty i _) = Empty i (countNeighbours n i cells)
+
+
+-- find the neighbours of a cell and filter out the empty cells
+-- to find the number of surrounding bombs
+countNeighbours :: Int -> Int -> [Cell] -> Int
+countNeighbours n i cells = length $ filter isBomb neighbours
+    where
+        neighbours = findNeighbours i n
+        isBomb index = case cells !! index of
+            Bomb _ -> True
+            _ -> False
+
+
+initGrid :: Int -> Int -> Grid
+initGrid size numBombs = countBombs $ placeBombs size $ randSelect numBombs size
+
+-- given an index, return the indices of the surrounding cells
+findNeighbours :: Int -> Int -> [Int]
+findNeighbours index n = handleEdges [index - n-1, index - n, index - n+1, index - 1, index + 1, index + n-1, index + n, index + n+1]
+    where
+        handleEdges = filter (\x -> x >= 0 && x < n*n && abs (x `mod` n - index `mod` n) <= 1)
+        -- handles the case of edge cells
+        -- if neigbour is out of bounds, remove it
+        -- if neighbour is more than one column away, remove it
+
