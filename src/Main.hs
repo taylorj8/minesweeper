@@ -4,6 +4,7 @@ import qualified Graphics.UI.Threepenny as UI
 import Graphics.UI.Threepenny.Core as C
 
 import Data.IORef ( IORef, newIORef, readIORef, writeIORef , modifyIORef)
+import Data.List.Split (chunksOf)
 
 import Minesweeper
 
@@ -35,18 +36,20 @@ setup window = do
     getBody window #+
         [
             element title,
-            makeGrid gridRef revRef
+            makeGrid gridRef revRef 5
         ]
 
     return ()
 
 
-makeGrid :: IORef Grid -> IORef [Bool] -> UI Element
-makeGrid gridRef revRef = do
+makeGrid :: IORef Grid -> IORef [Bool] -> Int -> UI Element
+makeGrid gridRef revRef n = do
     (Grid _ cells) <- liftIO $ readIORef gridRef
-    C.row $ map makeCell cells
+    revealed <- liftIO $ readIORef revRef
+    C.grid $ map makeRow (chunksOf n cells) (head revealed)
         where
-            makeCell c = cell False c revRef
+            makeRow chunk  = map makeCell chunk
+            makeCell c = cell (head revealed) c revRef
 
 
 cell :: Bool -> Cell -> IORef [Bool] -> UI Element
