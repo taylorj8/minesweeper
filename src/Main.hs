@@ -16,48 +16,44 @@ main = do
 
 
 setup window = do
-    return window # set title "MineSweeper"
+    return window # set title "Minesweeper"
 
     title <- UI.canvas
-        # set UI.width 100
-        # set UI.height 50
+        # set UI.width 200
+        # set UI.height 20
         # set UI.textFont "20px sans-serif"
         # set UI.style [
             ("border", "solid black 2px"),
             ("background", "#eee")
         ]
-        # set UI.text "MineSweeper"
+        
+    title # UI.fillText "Minesweeper" (10, 32)
 --   state <- liftIO $ newIORef Menu
 
     gridRef <- liftIO $ newIORef $ initGrid 5 10 0
-    revRef <- liftIO $ newIORef $ replicate 25 False
-
 
     getBody window #+
         [
             element title,
-            makeGrid gridRef revRef 5
+            makeGrid gridRef 5
         ]
 
     return ()
 
 
-makeGrid :: IORef Grid -> IORef [Bool] -> Int -> UI Element
-makeGrid gridRef revRef n = do
+makeGrid :: IORef Grid -> Int -> UI Element
+makeGrid gridRef n = do
     (Grid _ cells) <- liftIO $ readIORef gridRef
-    revealed <- liftIO $ readIORef revRef
-    C.grid $ map makeRow (chunksOf n cells) (head revealed)
+    C.grid $ map makeRow (chunksOf n cells)
         where
             makeRow chunk  = map makeCell chunk
-            makeCell c = cell (head revealed) c revRef
+            makeCell c = cell c revRef
 
 
-cell :: Bool -> Cell -> IORef [Bool] -> UI Element
-cell False c revRef = do
-    i <- case c of
-        Bomb i -> return i
-        Empty i _ -> return i
-        Null -> return 0
+cell :: Cell -> IORef Grid -> UI Element
+cell c gridRef = case c of
+        Bomb i True -> do
+        Empty i _ _ -> do
     button <- UI.canvas # set UI.style [
             ("width", "30px"),
             ("height", "30px"),
@@ -65,28 +61,45 @@ cell False c revRef = do
             ("border", "1px solid black")
         ]
     on UI.click button $ \_ -> do
-        revealCell i revRef
+        liftIO $ modifyIORef gridRef (revealCell i)
         liftIO $ print c
         return ()
     return button
-cell True c _ = do
-    color <- case c of
-        Bomb _ -> return "red"
-        Empty _ _ -> return "white"
-        Null -> return "white"
-    UI.div # set UI.style [
-            ("width", "30px"),
-            ("height", "30px"),
-            ("background-color", color),
-            ("border", "1px solid black")
-        ]
 
 
-revealCell :: Int -> IORef [Bool] -> UI ()
-revealCell i revRef = do
-    rev <- liftIO $ readIORef revRef
-    liftIO $ writeIORef revRef (take i rev ++ [True] ++ drop (i+1) rev)
-    return ()
+-- cell' :: Cell -> IORef Grid -> UI Element
+-- cell' c gridRef = do
+--     i <- case c of
+--         Bomb i _ -> return i
+--         Empty i _ _ -> return i
+--     button <- UI.canvas # set UI.style [
+--             ("width", "30px"),
+--             ("height", "30px"),
+--             ("background-color", "grey"),
+--             ("border", "1px solid black")
+--         ]
+--     on UI.click button $ \_ -> do
+--         liftIO $ modifyIORef gridRef (revealCell i)
+--         liftIO $ print c
+--         return ()
+--     return button
+-- cell c _ = do
+--     color <- case c of
+--         Bomb _ _ -> return "red"
+--         Empty {} -> return "white"
+--     UI.div # set UI.style [
+--             ("width", "30px"),
+--             ("height", "30px"),
+--             ("background-color", color),
+--             ("border", "1px solid black")
+--         ]
+
+
+-- revealCell :: Int -> IORef [Bool] -> UI ()
+-- revealCell i revRef = do
+--     rev <- liftIO $ readIORef revRef
+--     liftIO $ writeIORef revRef (take i rev ++ [True] ++ drop (i+1) rev)
+--     return ()
 
 
 -- populateGrid :: Int -> [[UI Element]]

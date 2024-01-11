@@ -12,16 +12,15 @@ import System.Random.Shuffle (shuffle')
 -- cell can either be a bomb or a number representing surrounding bombs
 -- also stores the index of the cell
 data Cell
-    = Bomb Int
-    | Empty Int Int
-    | Null
+    = Bomb Int Bool
+    | Empty Int Bool Int 
 
-type Test = (Int, Cell)
+type Test = (Int, Bool, Cell)
 
 -- show B for bomb or number in empty cell
 instance Show Cell where
-    show (Bomb _ ) = "B"
-    show (Empty _ n) = show n
+    show (Bomb _ _) = "B"
+    show (Empty _ _ n) = show n
 
 -- board represented as a list of cells
 data Grid = Grid Int [Cell]
@@ -64,15 +63,15 @@ randSelect' n numBombs firstCell = take numBombs . nub . filter (`notElem` safeC
 placeBombs :: Int -> [Int] -> Grid
 placeBombs n bombIndices = Grid n (map placeBomb [0..n*n])
     where
-        placeBomb index = if index `elem` bombIndices then Bomb index else Empty index 0
+        placeBomb index = if index `elem` bombIndices then Bomb index False else Empty index False 0
 
 
 -- for each empty cell, count the number of surrounding bombs
 countBombs :: Grid -> Grid
 countBombs (Grid n cells) = Grid n (map count cells)
     where
-        count (Bomb i) = Bomb i
-        count (Empty i _) = Empty i (countNeighbours n i cells)
+        count (Bomb r i) = Bomb r i
+        count (Empty i r _) = Empty i r (countNeighbours n i cells)
 
 
 -- find the neighbours of a cell and filter out the empty cells
@@ -82,7 +81,7 @@ countNeighbours n i cells = length $ filter isBomb neighbours
     where
         neighbours = findNeighbours i n
         isBomb index = case cells !! index of
-            Bomb _ -> True
+            Bomb _ _ -> True
             _ -> False
 
 
@@ -104,8 +103,8 @@ initGrid :: Int -> Int -> Int -> Grid
 initGrid size numBombs firstCell = countBombs $ placeBombs size $ randSelect' size numBombs firstCell
 
 
--- revealCell :: Grid -> Int -> Grid
--- revealCell (Grid n cells) index = Grid n (map reveal cells)
---     where
---         reveal (Bomb i r) = if i == index then Bomb i True else Bomb i r
---         reveal (Empty i r n) = if i == index then Empty i True n else Empty i r n
+revealCell :: Int -> Grid -> Grid
+revealCell index (Grid n cells) = Grid n (map reveal cells)
+    where
+        reveal (Bomb i r) = if i == index then Bomb i True else Bomb i r
+        reveal (Empty i r n) = if i == index then Empty i True n else Empty i r n
