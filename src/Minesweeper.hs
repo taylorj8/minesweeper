@@ -3,7 +3,7 @@ module Minesweeper where
 {-# LANGUAGE BangPatterns #-}
 
 import System.Random (mkStdGen, randomRs)
-import Data.List (nub, (\\))
+import Data.List (nub, (\\), concatMap)
 import Data.Time (getCurrentTime, nominalDiffTimeToSeconds)
 import Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
 import System.IO.Unsafe (unsafePerformIO)
@@ -11,16 +11,22 @@ import System.Random.Shuffle (shuffle')
 
 -- cell can either be a bomb or a number representing surrounding bombs
 -- also stores the index of the cell
-data Cell
-    = Bomb Int Bool
-    | Empty Int Bool Int 
+data CellType
+    = Bomb
+    | Empty Int 
 
-type Test = (Int, Bool, Cell)
+type Cell = (Int, Bool, CellType)
+
+bomb :: Int -> Bool -> Cell
+bomb i r = (i, r, Bomb)
+
+empty :: Int -> Bool -> Int -> Cell
+empty i r n = (i, r, Empty n)
 
 -- show B for bomb or number in empty cell
-instance Show Cell where
-    show (Bomb _ _) = "B"
-    show (Empty _ _ n) = show n
+instance Show CellType where
+    show Bomb = "B"
+    show (Empty n) = show n
 
 -- board represented as a list of cells
 data Grid = Grid Int [Cell]
@@ -63,15 +69,15 @@ randSelect' n numBombs firstCell = take numBombs . nub . filter (`notElem` safeC
 placeBombs :: Int -> [Int] -> Grid
 placeBombs n bombIndices = Grid n (map placeBomb [0..n*n])
     where
-        placeBomb index = if index `elem` bombIndices then Bomb index False else Empty index False 0
+        placeBomb index = if index `elem` bombIndices then bomb index False else empty index False 0
 
 
 -- for each empty cell, count the number of surrounding bombs
 countBombs :: Grid -> Grid
 countBombs (Grid n cells) = Grid n (map count cells)
     where
-        count (Bomb r i) = Bomb r i
-        count (Empty i r _) = Empty i r (countNeighbours n i cells)
+        count (i, r, Bomb) = bomb i r
+        count (i, r, (Empty _)) = empty i r (countNeighbours n i cells)
 
 
 -- find the neighbours of a cell and filter out the empty cells
@@ -81,7 +87,7 @@ countNeighbours n i cells = length $ filter isBomb neighbours
     where
         neighbours = findNeighbours i n
         isBomb index = case cells !! index of
-            Bomb _ _ -> True
+            (_, _, Bomb) -> True
             _ -> False
 
 
@@ -102,9 +108,23 @@ findNeighbours index n = handleEdges [index - n-1, index - n, index - n+1, index
 initGrid :: Int -> Int -> Int -> Grid
 initGrid size numBombs firstCell = countBombs $ placeBombs size $ randSelect' size numBombs firstCell
 
+-- recursive function to reveal all 0 cells
+blockReveal :: Int -> Grid -> Grid
+blockReveal index grid = revealCells (blockReveal' grid index) grid
 
-revealCell :: Int -> Grid -> Grid
-revealCell index (Grid n cells) = Grid n (map reveal cells)
+-- if a cell contains 0, recurse to neighbours
+-- concatenate results to get the indices of cells to be revealed
+blockReveal' :: Grid -> Int -> [Int]
+blockReveal' (Grid n cells) index = do
+    case cells !! index of
+        (_, _, Empty 0) -> do
+            let neighbours = findNeighbours index n
+            index : (concatMap (blockReveal' (Grid n cells)) neighbours)
+        otherwise -> [index]
+    
+-- reveals the cells at the given indices
+revealCells :: [Int] -> Grid -> Grid
+revealCells index (Grid n cells) = Grid n (map reveal cells)
     where
-        reveal (Bomb i r) = if i == index then Bomb i True else Bomb i r
-        reveal (Empty i r n) = if i == index then Empty i True n else Empty i r n
+        reveal (i, r, Bomb) = if i `elem` index then bomb i True else bomb i r
+        reveal (i, r, (Empty n)) = if i `elem` index then empty i True n else empty i r n
