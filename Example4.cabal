@@ -20,4 +20,6 @@ executable Example4
                      , threepenny-gui
                      , split
                      , random
+                     , random-shuffle
                      , time
+

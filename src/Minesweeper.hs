@@ -1,12 +1,16 @@
 module Minesweeper where
 
+{-# LANGUAGE BangPatterns #-}
+
 import System.Random (mkStdGen, randomRs)
-import Data.List (nub)
+import Data.List (nub, (\\))
 import Data.Time (getCurrentTime, nominalDiffTimeToSeconds)
 import Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
 import System.IO.Unsafe (unsafePerformIO)
+import System.Random.Shuffle (shuffle')
 
 -- cell can either be a bomb or a number representing surrounding bombs
+-- also stores the index of the cell
 data Cell
     = Bomb Int
     | Empty Int Int 
@@ -26,16 +30,19 @@ instance Show Grid where
             rows = [take n $ drop (i*n) cells | i <- [0..n-1]]
             showRow = unwords . map show
 
--- randomly select n indexes from a list of size m for placing bombs
--- nub removes duplicates from the random number stream
-randSelect :: Int -> Int -> [Int]
-randSelect n m = take n . nub $ randomRs (0, m-1) $ mkStdGen nanosSinceEpoch
-    where 
+
+-- randomly select numBombs indexes from a list of size n*n for placing bombs
+-- generate list with all potential indexes, remove safe cells, randomly shuffle and select first numBombs
+-- safeCells can't have bombs - first cell revealed and its neighbours
+randSelect :: Int -> Int -> Int -> [Int]
+randSelect n numBombs firstCell = take numBombs potentialCells
+    where
+        potentialCells = shuffle' ([0..n*n-1] \\ safeCells) (n*n-1) (mkStdGen nanosSinceEpoch)
+        safeCells = firstCell : findNeighbours firstCell n
         nanosSinceEpoch = floor . nominalDiffTimeToSeconds . utcTimeToPOSIXSeconds $ unsafePerformIO getCurrentTime
         -- system time (converted to Int) used as seed for random number generator
         -- unsafePerformIO used to avoid returning IO Int
 
-test = floor . nominalDiffTimeToSeconds . utcTimeToPOSIXSeconds $ unsafePerformIO getCurrentTime
 
 -- place bombs at the given indices
 placeBombs :: Int -> [Int] -> Grid
@@ -63,11 +70,6 @@ countNeighbours n i cells = length $ filter isBomb neighbours
             _ -> False
 
 
--- initialise the grid
--- get list of bomb positions, place the bombs and find the surrounding bomb count for empty cells
-initGrid :: Int -> Int -> Grid
-initGrid size numBombs = countBombs $ placeBombs size $ randSelect numBombs (size*size)
-
 -- given an index, return the indices of the surrounding cells
 findNeighbours :: Int -> Int -> [Int]
 findNeighbours index n = handleEdges [index - n-1, index - n, index - n+1, index - 1, index + 1, index + n-1, index + n, index + n+1]
@@ -76,3 +78,11 @@ findNeighbours index n = handleEdges [index - n-1, index - n, index - n+1, index
         -- handles the case of edge cells
         -- if neigbour is out of bounds, remove it
         -- if neighbour is more than one column away, remove it
+
+
+-- initialise the grid
+-- get list of bomb positions, place the bombs and find the surrounding bomb count for empty cells
+-- grid is initialised after first cell is revealed
+-- index of first cell is passed to avoid placing a bomb there
+initGrid :: Int -> Int -> Int -> Grid
+initGrid size numBombs firstCell = countBombs $ placeBombs size $ randSelect size numBombs firstCell
