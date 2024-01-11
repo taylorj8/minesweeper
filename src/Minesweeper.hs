@@ -12,13 +12,16 @@ import System.Random.Shuffle (shuffle')
 -- cell can either be a bomb or a number representing surrounding bombs
 -- also stores the index of the cell
 data Cell
-    = Bomb Int Bool
-    | Empty Int Bool Int
+    = Bomb Int
+    | Empty Int Int
+    | Null
+
+type Test = (Int, Cell)
 
 -- show B for bomb or number in empty cell
 instance Show Cell where
-    show (Bomb _ _) = "B"
-    show (Empty _ n _) = show n
+    show (Bomb _ ) = "B"
+    show (Empty _ n) = show n
 
 -- board represented as a list of cells
 data Grid = Grid Int [Cell]
@@ -31,13 +34,26 @@ instance Show Grid where
             showRow = unwords . map show
 
 
+-- BROKEN - random.shuffle not working with ThreePenny
 -- randomly select numBombs indexes from a list of size n*n for placing bombs
 -- generate list with all potential indexes, remove safe cells, randomly shuffle and select first numBombs
 -- safeCells can't have bombs - first cell revealed and its neighbours
 randSelect :: Int -> Int -> Int -> [Int]
 randSelect n numBombs firstCell = take numBombs potentialCells
     where
-        potentialCells = shuffle' ([0..n*n-1] \\ safeCells) (n*n-1) (mkStdGen nanosSinceEpoch)
+        potentialCells = shuffle' ([0..n*n-1] \\ safeCells) (n*n-1) (mkStdGen timeSinceEpoch)
+        safeCells = firstCell : findNeighbours firstCell n
+        timeSinceEpoch = floor . nominalDiffTimeToSeconds . utcTimeToPOSIXSeconds $ unsafePerformIO getCurrentTime
+        -- system time (converted to Int) used as seed for random number generator
+        -- unsafePerformIO used to avoid returning IO Int
+
+
+-- randomly select numBombs indexes from a list of size n*n for placing bombs
+-- nub removes duplicates from the random number stream
+-- safeCells can't have bombs - first cell revealed and its neighbours
+randSelect' :: Int -> Int -> Int -> [Int]
+randSelect' n numBombs firstCell = take numBombs . nub . filter (`notElem` safeCells) $ randomRs (0, n*n-1) $ mkStdGen nanosSinceEpoch
+    where 
         safeCells = firstCell : findNeighbours firstCell n
         nanosSinceEpoch = floor . nominalDiffTimeToSeconds . utcTimeToPOSIXSeconds $ unsafePerformIO getCurrentTime
         -- system time (converted to Int) used as seed for random number generator
@@ -48,15 +64,15 @@ randSelect n numBombs firstCell = take numBombs potentialCells
 placeBombs :: Int -> [Int] -> Grid
 placeBombs n bombIndices = Grid n (map placeBomb [0..n*n])
     where
-        placeBomb index = if index `elem` bombIndices then Bomb index False else Empty index False 0
+        placeBomb index = if index `elem` bombIndices then Bomb index else Empty index 0
 
 
 -- for each empty cell, count the number of surrounding bombs
 countBombs :: Grid -> Grid
 countBombs (Grid n cells) = Grid n (map count cells)
     where
-        count (Bomb i r) = Bomb i r
-        count (Empty i r _) = Empty i r (countNeighbours n i cells)
+        count (Bomb i) = Bomb i
+        count (Empty i _) = Empty i (countNeighbours n i cells)
 
 
 -- find the neighbours of a cell and filter out the empty cells
@@ -66,7 +82,7 @@ countNeighbours n i cells = length $ filter isBomb neighbours
     where
         neighbours = findNeighbours i n
         isBomb index = case cells !! index of
-            Bomb _ _ -> True
+            Bomb _ -> True
             _ -> False
 
 
@@ -85,11 +101,11 @@ findNeighbours index n = handleEdges [index - n-1, index - n, index - n+1, index
 -- grid is initialised after first cell is revealed
 -- index of first cell is passed to avoid placing a bomb there
 initGrid :: Int -> Int -> Int -> Grid
-initGrid size numBombs firstCell = countBombs $ placeBombs size $ randSelect size numBombs firstCell
+initGrid size numBombs firstCell = countBombs $ placeBombs size $ randSelect' size numBombs firstCell
 
 
-revealCell :: Grid -> Int -> Grid
-revealCell (Grid n cells) index = Grid n (map reveal cells)
-    where
-        reveal (Bomb i r) = if i == index then Bomb i True else Bomb i r
-        reveal (Empty i r n) = if i == index then Empty i True n else Empty i r n
+-- revealCell :: Grid -> Int -> Grid
+-- revealCell (Grid n cells) index = Grid n (map reveal cells)
+--     where
+--         reveal (Bomb i r) = if i == index then Bomb i True else Bomb i r
+--         reveal (Empty i r n) = if i == index then Empty i True n else Empty i r n

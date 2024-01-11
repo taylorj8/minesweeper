@@ -1,7 +1,7 @@
 module Main where
 
 import qualified Graphics.UI.Threepenny as UI
-import Graphics.UI.Threepenny.Core
+import Graphics.UI.Threepenny.Core as C
 
 import Data.IORef ( IORef, newIORef, readIORef, writeIORef , modifyIORef)
 
@@ -17,61 +17,80 @@ main = do
 setup window = do
     return window # set title "MineSweeper"
 
-
-    -- IORef to store the current equation
-    equation <- liftIO $ newIORef ""
+    title <- UI.canvas
+        # set UI.width 100
+        # set UI.height 50
+        # set UI.textFont "20px sans-serif"
+        # set UI.style [
+            ("border", "solid black 2px"),
+            ("background", "#eee")
+        ]
+        # set UI.text "MineSweeper"
 --   state <- liftIO $ newIORef Menu
 
-    b0 <- styledButton "0" numColor "60px"
-    b1 <- styledButton "1" numColor "60px"
-    b2 <- styledButton "2" numColor "60px"
-    b3 <- styledButton "3" numColor "60px"
-    b4 <- styledButton "4" numColor "60px"
-    b5 <- styledButton "5" numColor "60px"
-    b6 <- styledButton "6" numColor "60px"
-    b7 <- styledButton "7" numColor "60px"
-    b8 <- styledButton "8" numColor "60px"
-    b9 <- styledButton "9" numColor "60px"
-    bDot <- styledButton "." numColor "60px"
-    bPlus <- styledButton "+" opColor "60px"
-    bMinus <- styledButton "-" opColor "60px"
-    bTimes <- styledButton "*" opColor "60px"
-    bDivide <- styledButton "/" opColor "60px"
-    bEquals <- styledButton "=" opColor "60px"
-    bAC <- styledButton "AC" opColor "128px"
-    bDel <- styledButton "Del" opColor "128px"
+    gridRef <- liftIO $ newIORef $ initGrid 5 10 0
+    revRef <- liftIO $ newIORef $ replicate 25 False
+
 
     getBody window #+
-      [
-        element screen,
-        row [element bAC, element bDel],
-        row [element b7, element b8, element b9, element bDivide], 
-        row [element b4, element b5, element b6, element bTimes], 
-        row [element b1, element b2, element b3, element bMinus], 
-        row [element b0, element bDot, element bEquals, element bPlus]
-      ] 
+        [
+            element title,
+            makeGrid gridRef revRef
+        ]
 
-    on UI.click bAC $ const $ do
-      liftIO $ writeIORef equation ""
-      screen # clearCanvas
-      liftIO $ writeIORef mode Enter
-    on UI.click bDel $ enter mode screen equation init
-    on UI.click b0 $ enter mode screen equation (++ "0")
-    on UI.click b1 $ enter mode screen equation (++ "1")
-    on UI.click b2 $ enter mode screen equation (++ "2")
-    on UI.click b3 $ enter mode screen equation (++ "3")
-    on UI.click b4 $ enter mode screen equation (++ "4")
-    on UI.click b5 $ enter mode screen equation (++ "5")
-    on UI.click b6 $ enter mode screen equation (++ "6")
-    on UI.click b7 $ enter mode screen equation (++ "7")
-    on UI.click b8 $ enter mode screen equation (++ "8")
-    on UI.click b9 $ enter mode screen equation (++ "9")
-    on UI.click bDot $ enter mode screen equation (++ ".")
-    on UI.click bPlus $ enter mode screen equation (++ "+")
-    on UI.click bMinus $ enter mode screen equation (++ "-")
-    on UI.click bTimes $ enter mode screen equation (++ "*")
-    on UI.click bDivide $ enter mode screen equation (++ "/")
-    on UI.click bEquals $ evaluateEquation mode screen equation
+    return ()
 
 
-cell :: Cell -> UI Element
+makeGrid :: IORef Grid -> IORef [Bool] -> UI Element
+makeGrid gridRef revRef = do
+    (Grid _ cells) <- liftIO $ readIORef gridRef
+    C.row $ map makeCell cells
+        where
+            makeCell c = cell False c revRef
+
+
+cell :: Bool -> Cell -> IORef [Bool] -> UI Element
+cell False c revRef = do
+    i <- case c of
+        Bomb i -> return i
+        Empty i _ -> return i
+        Null -> return 0
+    button <- UI.canvas # set UI.style [
+            ("width", "30px"),
+            ("height", "30px"),
+            ("background-color", "grey"),
+            ("border", "1px solid black")
+        ]
+    on UI.click button $ \_ -> do
+        revealCell i revRef
+        liftIO $ print c
+        return ()
+    return button
+cell True c _ = do
+    color <- case c of
+        Bomb _ -> return "red"
+        Empty _ _ -> return "white"
+        Null -> return "white"
+    UI.div # set UI.style [
+            ("width", "30px"),
+            ("height", "30px"),
+            ("background-color", color),
+            ("border", "1px solid black")
+        ]
+
+
+revealCell :: Int -> IORef [Bool] -> UI ()
+revealCell i revRef = do
+    rev <- liftIO $ readIORef revRef
+    liftIO $ writeIORef revRef (take i rev ++ [True] ++ drop (i+1) rev)
+    return ()
+
+
+-- populateGrid :: Int -> [[UI Element]]
+-- populateGrid n = replicate n (replicate n $ cell False Null)
+
+-- initialGrid :: Int -> UI [Element]
+-- initialGrid n = [cell False Null | _ <- [1..n*n]]
+
+-- uiGrid :: Grid -> [Bool] -> [UI Element]
+-- uiGrid (Grid n cells) revealed = zipWith cell revealed cells
