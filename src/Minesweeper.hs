@@ -26,6 +26,7 @@ empty i r n = (i, r, Empty n)
 -- show B for bomb or number in empty cell
 instance Show CellType where
     show Bomb = "B"
+    show (Empty 0) = " "
     show (Empty n) = show n
 
 -- board represented as a list of cells

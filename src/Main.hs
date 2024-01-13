@@ -50,37 +50,51 @@ makeGrid win gridRef n = do
     C.grid $ map (makeRow win) (chunksOf n cells)
         where
             makeRow win chunk = map (makeCell win) chunk
-            makeCell win c = cell win c gridRef
+            makeCell win c = uiCell win c gridRef
 
-
-cell :: Window -> Cell -> IORef Grid -> UI Element
-cell win (i, False, c) gridRef = do
-    color <- case c of
-        Bomb -> return "red"
-        Empty _ -> return "white"
-    button <- UI.canvas # set UI.style [
+-- todo use IORef to update board
+uiCell :: Window -> Cell -> IORef Grid -> UI Element
+uiCell win (i, _, c) gridRef = do
+    square <- UI.canvas 
+        # set UI.id_ (show i)
+        # set UI.style [
             ("width", "30px"),
             ("height", "30px"),
-            ("background-color", "grey"),
-            ("border", "1px solid black")
-        ] # set UI.id_ (show i)
-    on UI.click button $ \_ -> do
-        liftIO $ modifyIORef gridRef (blockReveal i)
+            ("background-color", "lightgrey"),
+            ("border", "1px solid black"),
+            ("text-align", "center"),
+            ("font-size", "20px"),
+            ("font-family", "sans-serif"),
+            ("color", "black")
+        ] 
+    on UI.click square $ \_ -> do
+        -- liftIO $ modifyIORef gridRef (blockReveal i)
         grid <- liftIO $ readIORef gridRef
-        liftIO $ print c
-        -- deleteCells win i c
+        revCells i grid win
         return ()
-    return button
-cell win (_, True, c) _ = do
+    return square
+
+
+revCells :: Int -> Grid -> Window -> UI ()
+revCells index (Grid n cells) win = do
+    let indexes = blockReveal' (Grid n cells) index
+    mapM_ (updateCell cells win) indexes
+
+updateCell :: [Cell] -> Window -> Int -> UI ()
+updateCell cells win i = do
+    let (_, _, c) = cells !! i
     color <- case c of
         Bomb -> return "red"
         Empty _ -> return "white"
-    UI.div # set UI.style [
-            ("width", "30px"),
-            ("height", "30px"),
-            ("background-color", color),
-            ("border", "1px solid black")
-        ]
+    el <- UI.getElementById win (show i)
+    case el of 
+        Nothing -> return ()
+        Just cell -> do 
+            element cell 
+                # set UI.style [("background-color", color)]
+                # set UI.text (show c)
+            return ()
+    return ()
 
 
 -- todo if refCells doesn't work out
