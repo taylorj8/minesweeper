@@ -7,8 +7,11 @@ import Graphics.UI.Threepenny.Core as C
 
 import Data.IORef ( IORef, newIORef, readIORef, writeIORef , modifyIORef)
 import Data.List.Split (chunksOf)
+import Data.List (elemIndex)
 
 import Minesweeper
+import Control.Monad (replicateM, liftM)
+import Data.Maybe (fromMaybe)
 
 -- data State = Menu | Playing | GameOver deriving Eq
 
@@ -33,71 +36,80 @@ setup window = do
 --   state <- liftIO $ newIORef Menu
 
     gridRef <- liftIO $ newIORef $ initGrid 5 10 0
-    uiGrid <- makeGrid window gridRef 5
+    squares <- replicateM 25 uiCell
+    mapM_ (setOnClick window gridRef squares) $ zip squares [0..]
+
+    -- uiGrid <- makeGrid window gridRef 5
+
 
     getBody window #+
         [
             element title,
-            element uiGrid
+            makeGrid squares 5
         ]
 
     return ()
 
 
-makeGrid :: Window -> IORef Grid -> Int -> UI Element
-makeGrid win gridRef n = do
-    (Grid _ cells) <- liftIO $ readIORef gridRef
-    let squares = map (makeRow win (concat squares)) (chunksOf n cells)
-    UI.grid squares
-        where
-            makeRow win squares chunk = map (makeCell win squares) chunk
-            makeCell win squares c = uiCell win c gridRef squares
+makeGrid :: [Element] -> Int -> UI Element
+makeGrid squares n = UI.grid $ chunksOf n (map element squares)
         
 
--- todo use IORef to update board
-uiCell :: Window -> Cell -> IORef Grid -> [UI Element] -> UI Element
-uiCell win (i, _, c) gridRef squares = do
-    square <- UI.canvas 
-        # set UI.id_ (show i)
-        # set UI.style [
-            ("width", "30px"),
-            ("height", "30px"),
-            ("background-color", "lightgrey"),
-            ("border", "1px solid black"),
-            ("text-align", "center"),
-            ("font-size", "20px"),
-            ("font-family", "sans-serif"),
-            ("color", "black")
-        ] 
+setOnClick :: Window -> IORef Grid -> [Element] -> (Element, Int) -> UI ()
+setOnClick win gridRef squares (square, i) = do
     on UI.click square $ \_ -> do
+        liftIO $ print i
         -- liftIO $ modifyIORef gridRef (blockReveal i)
         grid <- liftIO $ readIORef gridRef
-        revCells i grid win
+        revCells i grid squares
+        -- updateCells [i] $ zip squares [0..]
         return ()
-    return square
 
 
-revCells :: Int -> Grid -> Window -> UI ()
-revCells index (Grid n cells) win = do
+-- todo use IORef to update board
+uiCell :: UI Element
+uiCell = UI.canvas # set UI.style [
+        ("width", "30px"),
+        ("height", "30px"),
+        ("background-color", "lightgrey"),
+        ("border", "1px solid black"),
+        ("text-align", "center"),
+        ("font-size", "20px"),
+        ("font-family", "sans-serif"),
+        ("color", "black")
+    ] 
+
+
+revCells :: Int -> Grid -> [Element] -> UI ()
+revCells index (Grid n cells) squares = do
     let indexes = blockReveal' (Grid n cells) index
-    mapM_ (updateCell cells win) indexes
+    updateCells indexes $ zip squares [0..]
 
-updateCell :: [Cell] -> Window -> Int -> UI ()
-updateCell cells win i = do
-    let (_, _, c) = cells !! i
-    color <- case c of
-        Bomb -> return "red"
-        Empty _ -> return "white"
-    el <- UI.getElementById win (show i)
-    case el of 
-        Nothing -> return ()
-        Just cell -> do 
-            element cell 
-                # set UI.style [("background-color", color)]
-                # set UI.text (show c)
-            return ()
-    return ()
+-- updateCell :: [Cell] -> Window -> Int -> UI ()
+-- updateCell cells win i = do
+--     let (_, _, c) = cells !! i
+--     color <- case c of
+--         Bomb -> return "red"
+--         Empty _ -> return "white"
+--     el <- UI.getElementById win (show i)
+--     case el of 
+--         Nothing -> return ()
+--         Just cell -> do 
+--             element cell 
+--                 # set UI.style [("background-color", color)]
+--                 # set UI.text (show c)
+--             return ()
+--     return ()
 
+updateCells :: [Int] -> [(Element, Int)] -> UI ()
+updateCells indexes = mapM_ update
+    where
+        update (square, i) = if i `elem` indexes 
+            then do 
+                element square 
+                    # set UI.style [("background-color", "white")]
+                    # set UI.text (show i)
+            else return square
 
 -- todo if refCells doesn't work out
 -- deleteCells :: Window -> Int -> CellType -> UI ()

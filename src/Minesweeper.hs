@@ -125,7 +125,7 @@ blockReveal' (Grid n cells) index = do
     
 -- reveals the cells at the given indices
 revealCells :: [Int] -> Grid -> Grid
-revealCells index (Grid n cells) = Grid n (map reveal cells)
+revealCells indexes (Grid n cells) = Grid n (map reveal cells)
     where
-        reveal (i, r, Bomb) = if i `elem` index then bomb i True else bomb i r
-        reveal (i, r, (Empty n)) = if i `elem` index then empty i True n else empty i r n
+        reveal (i, r, Bomb) = if i `elem` indexes then bomb i True else bomb i r
+        reveal (i, r, (Empty n)) = if i `elem` indexes then empty i True n else empty i r n
