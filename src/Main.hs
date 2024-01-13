@@ -47,14 +47,16 @@ setup window = do
 makeGrid :: Window -> IORef Grid -> Int -> UI Element
 makeGrid win gridRef n = do
     (Grid _ cells) <- liftIO $ readIORef gridRef
-    C.grid $ map (makeRow win) (chunksOf n cells)
+    let squares = map (makeRow win (concat squares)) (chunksOf n cells)
+    UI.grid squares
         where
-            makeRow win chunk = map (makeCell win) chunk
-            makeCell win c = uiCell win c gridRef
+            makeRow win squares chunk = map (makeCell win squares) chunk
+            makeCell win squares c = uiCell win c gridRef squares
+        
 
 -- todo use IORef to update board
-uiCell :: Window -> Cell -> IORef Grid -> UI Element
-uiCell win (i, _, c) gridRef = do
+uiCell :: Window -> Cell -> IORef Grid -> [UI Element] -> UI Element
+uiCell win (i, _, c) gridRef squares = do
     square <- UI.canvas 
         # set UI.id_ (show i)
         # set UI.style [
