@@ -20,6 +20,7 @@ main = do
     startGUI defaultConfig setup
 
 
+setup :: Window -> UI ()
 setup window = do
     return window # set title "Minesweeper"
 
@@ -35,8 +36,8 @@ setup window = do
     title # UI.fillText "Minesweeper" (10, 32)
 --   state <- liftIO $ newIORef Menu
 
-    gridRef <- liftIO $ newIORef $ initGrid 5 10 0
     squares <- replicateM 25 uiCell
+    gridRef <- liftIO $ newIORef $ initGrid 5 10 0
     mapM_ (setOnClick window gridRef squares) $ zip squares [0..]
 
     -- uiGrid <- makeGrid window gridRef 5

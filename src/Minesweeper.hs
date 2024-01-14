@@ -9,19 +9,28 @@ import Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
 import System.IO.Unsafe (unsafePerformIO)
 import System.Random.Shuffle (shuffle')
 
+import Graphics.UI.Threepenny.Core (Element)
+
 -- cell can either be a bomb or a number representing surrounding bombs
 -- also stores the index of the cell
 data CellType
     = Bomb
-    | Empty Int 
+    | Empty Int
 
-type Cell = (Int, Bool, CellType)
+data CellState
+    = Hidden
+    | Revealed
+    | Flagged
 
-bomb :: Int -> Bool -> Cell
-bomb i r = (i, r, Bomb)
+-- type Cell = (Int, Element, CellState, CellType)
 
-empty :: Int -> Bool -> Int -> Cell
-empty i r n = (i, r, Empty n)
+data Cell = Cell Int Element CellState CellType
+
+bomb :: Int -> Element -> CellState -> Cell
+bomb i e r = (i, e, r, Bomb)
+
+empty :: Int -> Element -> CellState -> Int -> Cell
+empty i e r n = (i, e, r, Empty n)
 
 -- show B for bomb or number in empty cell
 instance Show CellType where
@@ -67,18 +76,18 @@ randSelect' n numBombs firstCell = take numBombs . nub . filter (`notElem` safeC
 
 
 -- place bombs at the given indices
-placeBombs :: Int -> [Int] -> Grid
-placeBombs n bombIndices = Grid n (map placeBomb [0..n*n])
+placeBombs :: Int -> [Int] -> [Element] -> Grid
+placeBombs n bombIndices squares = Grid n (map placeBomb $ zip squares [0..n*n])
     where
-        placeBomb index = if index `elem` bombIndices then bomb index False else empty index False 0
+        placeBomb (square, index) = if index `elem` bombIndices then bomb index square Hidden else empty index square Hidden 0
 
 
 -- for each empty cell, count the number of surrounding bombs
 countBombs :: Grid -> Grid
 countBombs (Grid n cells) = Grid n (map count cells)
     where
-        count (i, r, Bomb) = bomb i r
-        count (i, r, (Empty _)) = empty i r (countNeighbours n i cells)
+        count (i, e, r, Bomb) = bomb i e r
+        count (i, e, r, (Empty _)) = empty i e r (countNeighbours n i cells)
 
 
 -- find the neighbours of a cell and filter out the empty cells
@@ -106,7 +115,7 @@ findNeighbours index n = handleEdges [index - n-1, index - n, index - n+1, index
 -- get list of bomb positions, place the bombs and find the surrounding bomb count for empty cells
 -- grid is initialised after first cell is revealed
 -- index of first cell is passed to avoid placing a bomb there
-initGrid :: Int -> Int -> Int -> Grid
+initGrid :: Int -> Int -> Int -> [Element] -> Grid
 initGrid size numBombs firstCell = countBombs $ placeBombs size $ randSelect' size numBombs firstCell
 
 
