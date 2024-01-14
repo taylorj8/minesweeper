@@ -22,8 +22,6 @@ data CellState
     | Revealed
     | Flagged
 
--- type Cell = (Int, Element, CellState, CellType)
-
 data Cell = Cell Int Element CellState CellType
 
 bomb :: Int -> Element -> CellState -> Cell
@@ -34,9 +32,12 @@ empty i e r n = Cell i e r (Empty n)
 
 -- show B for bomb or number in empty cell
 instance Show Cell where
-    show (Cell _ _ _ Bomb) = "B"
-    show (Cell _ _ _ (Empty 0)) = " "
-    show (Cell _ _ _ (Empty n)) = show n
+    show (Cell _ _ _ typ) = show typ
+
+instance Show CellType where
+    show Bomb = "B"
+    show (Empty 0) = " "
+    show (Empty n) = show n
 
 -- board represented as a list of cells
 data Grid = Grid Int [Cell]

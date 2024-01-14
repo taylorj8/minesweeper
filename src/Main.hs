@@ -23,7 +23,7 @@ main = do
 setup :: Window -> UI ()
 setup window = do
     return window # set title "Minesweeper"
-
+    runFunction $ ffi "window.oncontextmenu = function() { return false; }"
 
     title <- UI.canvas
         # set UI.width 200
@@ -59,13 +59,16 @@ makeGrid squares n = UI.grid $ chunksOf n (map element squares)
         
 
 setOnClick :: Grid -> UI ()
-setOnClick (Grid n cells) = mapM_ (setOnClick' cells (Grid n cells)) cells
+setOnClick (Grid n cells) = mapM_ (setOnClick' (Grid n cells)) cells
 
 
-setOnClick' :: [Cell] -> Grid -> Cell -> UI ()
-setOnClick' cells grid (Cell i square r n) = on UI.click square $ \_ -> revealCells i grid
-        -- liftIO $ modifyIORef gridRef (blockReveal i)
-        -- updateCells [i] $ zip squares [0..]
+setOnClick' :: Grid -> Cell -> UI ()
+setOnClick' grid (Cell i square _ _) = do
+    on UI.click square $ \_ -> revealCells i grid
+    on UI.contextmenu square $ \_ -> flagCell i grid
+
+    -- liftIO $ modifyIORef gridRef (blockReveal i)
+    -- updateCells [i] $ zip squares [0..]
 
 
 -- todo use IORef to update board
@@ -80,7 +83,7 @@ uiCell = UI.div # set UI.style [
         ("text-align", "center"),
         ("font-size", "20px"),
         ("font-family", "sans-serif"),
-        ("color", "black"),
+        ("font-weight", "bold"),
         ("display", "inline-block"),
         ("vertical-align", "top"),
         ("overflow", "hidden"),
@@ -88,24 +91,47 @@ uiCell = UI.div # set UI.style [
     ] 
 
 
+-- todo update state
 revealCells :: Int -> Grid -> UI ()
-revealCells index (Grid n cells) = do
-    let indexes = blockReveal (Grid n cells) index
-    updateCells Revealed indexes cells
-
-
-updateCells :: CellState -> [Int] -> [Cell] -> UI ()
-updateCells state indexes cells = do
-    liftIO $ print indexes
-    mapM_ update cells
+revealCells index (Grid n cells) = mapM_ update cells
     where
-        update (Cell i square _ _) = if i `elem` indexes 
-            then do 
-                element square 
-                    # set UI.style [("background-color", "white")]
-                    # set UI.text (show i)
+        indexes = blockReveal (Grid n cells) index
+        update (Cell i square curState typ) = if i `elem` indexes 
+            then case typ of
+                Bomb -> do -- todo end game
+                    element square 
+                        # set UI.style [("background-color", "red")]
+                        # set UI.text "💣"
+                _ -> case curState of
+                    Hidden -> 
+                        element square 
+                            # set UI.style [("background-color", "white"), ("color", textColor typ)]
+                            # set UI.text (show typ)
+                    _ -> return square
             else return square
 
+
+flagCell :: Int -> Grid -> UI Element
+flagCell index (Grid _ cells) = do
+    let (Cell _ square state _) = cells !! index
+    case state of
+        Hidden -> element square # set UI.text "🚩"
+        Flagged -> element square # set UI.text ""
+        _ -> return square
+    
+
+textColor :: CellType -> String
+textColor (Empty n) = case n of
+    1 -> "blue"
+    2 -> "green"
+    3 -> "red"
+    4 -> "purple"
+    5 -> "maroon"
+    6 -> "turquoise"
+    7 -> "black"
+    8 -> "grey"
+    _ -> "white"
+textColor _ = "white"
 
 -- updateCell :: [Cell] -> Window -> Int -> UI ()
 -- updateCell cells win i = do
