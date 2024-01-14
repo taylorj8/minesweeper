@@ -13,6 +13,8 @@ import Minesweeper
 import Control.Monad (replicateM, liftM)
 import Data.Maybe (fromMaybe)
 
+import qualified Data.Vector as V
+
 -- data State = Menu | Playing | GameOver deriving Eq
 
 main :: IO ()
@@ -39,36 +41,29 @@ setup window = do
 
     let size = 5
     squares <- replicateM (size*size) uiCell
-    let grid = initGrid size 10 0 squares
-    setOnClick grid
-    gridRef <- liftIO $ newIORef grid
+    gridRef <- liftIO $ newIORef $ initGrid size 10 0 squares
+    setOnClick gridRef
 
     getBody window #+
         [
             element title,
-            makeGrid squares size
+            displayGrid squares size
         ]
 
     return ()
 
 
-makeGrid :: [Element] -> Int -> UI Element
-makeGrid squares n = UI.grid $ chunksOf n (map element squares)
+displayGrid :: [Element] -> Int -> UI Element
+displayGrid squares n = UI.grid $ chunksOf n (map element squares)
         
-
-setOnClick :: IORef Grid-> UI ()
+setOnClick :: IORef Grid -> UI ()
 setOnClick gridRef = do 
     (Grid n cells) <- liftIO $ readIORef gridRef
-    mapM_ (setOnClick' (Grid n cells)) cells
-
-
-setOnClick' :: Grid -> Cell -> UI ()
-setOnClick' grid (Cell i square _ _) = do
-    on UI.click square $ \_ -> revealCells i grid
-    on UI.contextmenu square $ \_ -> flagCell i grid
-
-    -- liftIO $ modifyIORef gridRef (blockReveal i)
-    -- updateCells [i] $ zip squares [0..]
+    mapM_ (clickHandlers gridRef) cells
+        where 
+            clickHandlers gridRef (Cell i square state _) = do
+                on UI.click square $ \_ -> revealCells i gridRef
+                on UI.contextmenu square $ \_ -> flagCell i gridRef
 
 
 -- todo use IORef to update board
@@ -92,34 +87,39 @@ uiCell = UI.div # set UI.style [
 
 
 -- todo update state
-revealCells :: Int -> Grid -> UI ()
-revealCells index (Grid n cells) = mapM_ update cells
+-- todo rewrite with Vector accesses
+revealCells :: Int -> IORef Grid -> UI ()
+revealCells index gridRef = do
+    grid <- liftIO $ readIORef gridRef
+    let indexes = blockReveal grid index
+    mapM_ (update grid) indexes
+    liftIO $ writeIORef gridRef $ updateCells indexes grid
     where
-        indexes = blockReveal (Grid n cells) index
-        update (Cell i square state typ) = if i `elem` indexes 
-            then case state of
-                Hidden -> case typ of
-                    Bomb -> do -- todo end game
-                        element square 
-                            # set UI.style [("background-color", "red")]
-                            # set UI.text "💣"
-                    (Empty numBombs) -> element square 
-                            # set UI.style [("background-color", "white"), ("color", textColor numBombs)]
-                            # set UI.text (show typ)
+        update (Grid _ cells) index = do
+            let (Cell _ square state typ) = cells V.! index
+            case state of
+                Hidden -> do
+                    case typ of
+                        Bomb -> do -- todo end game
+                            element square 
+                                # set UI.style [("background-color", "red")]
+                                # set UI.text "💣"
+                        (Empty numBombs) -> element square 
+                                # set UI.style [("background-color", "white"), ("color", textColor numBombs)]
+                                # set UI.text (show typ)
                 _ -> return square
-            else return square
 
 
 flagCell :: Int -> IORef Grid -> UI Element
 flagCell index gridRef = do
     (Grid n cells) <- liftIO $ readIORef gridRef
-    let (Cell _ square state _) = cells !! index
+    let cell = cells V.! index
+    liftIO $ writeIORef gridRef $ toggleFlagged index (Grid n cells)
+    case cellState cell of
+        Hidden -> element (square cell) # set UI.text "🚩"
+        Flagged -> element (square cell) # set UI.text ""
+        _ -> element (square cell)
 
-    case state of
-        Hidden -> element square # set UI.text "🚩"
-        Flagged -> element square # set UI.text ""
-        _ -> return square
-    
 
 textColor :: Int -> String
 textColor n = case n of
@@ -132,23 +132,6 @@ textColor n = case n of
     7 -> "black"
     8 -> "grey"
     _ -> "white"
-
--- updateCell :: [Cell] -> Window -> Int -> UI ()
--- updateCell cells win i = do
---     let (_, _, c) = cells !! i
---     color <- case c of
---         Bomb -> return "red"
---         Empty _ -> return "white"
---     el <- UI.getElementById win (show i)
---     case el of 
---         Nothing -> return ()
---         Just cell -> do 
---             element cell 
---                 # set UI.style [("background-color", color)]
---                 # set UI.text (show c)
---             return ()
---     return ()
-
 
 
 -- todo if refCells doesn't work out

@@ -8,6 +8,7 @@ import Data.Time (getCurrentTime, nominalDiffTimeToSeconds)
 import Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
 import System.IO.Unsafe (unsafePerformIO)
 import System.Random.Shuffle (shuffle')
+import qualified Data.Vector as V
 
 import Graphics.UI.Threepenny.Core (Element)
 
@@ -16,13 +17,20 @@ import Graphics.UI.Threepenny.Core (Element)
 data CellType
     = Bomb
     | Empty Int
+    deriving Eq
 
 data CellState
     = Hidden
     | Revealed
     | Flagged
+    deriving (Show, Eq)
 
-data Cell = Cell Int Element CellState CellType
+data Cell = Cell {
+    index :: Int,
+    square :: Element,
+    cellState :: CellState,
+    cellType :: CellType
+}
 
 bomb :: Int -> Element -> CellState -> Cell
 bomb i e r = Cell i e r Bomb
@@ -39,14 +47,15 @@ instance Show CellType where
     show (Empty 0) = " "
     show (Empty n) = show n
 
--- board represented as a list of cells
-data Grid = Grid Int [Cell]
+-- board represented as a vector of cells
+-- a vector is used as accessing cells by index is needed frequently
+data Grid = Grid Int (V.Vector Cell)
 
 -- show grid in 2D format
 instance Show Grid where
     show (Grid n cells) = unlines $ map showRow rows
         where
-            rows = [take n $ drop (i*n) cells | i <- [0..n-1]]
+            rows = [take n $ drop (i*n) $ V.toList cells | i <- [0..n-1]]
             showRow = unwords . map show
 
 
@@ -78,28 +87,26 @@ randSelect' n numBombs firstCell = take numBombs . nub . filter (`notElem` safeC
 
 -- place bombs at the given indices
 placeBombs :: Int -> [Element] -> [Int] -> Grid
-placeBombs n squares bombIndices  = Grid n (map placeBomb $ zip squares [0..n*n])
+placeBombs n squares bombIndices = Grid n $ V.fromList (map placeBomb $ zip squares [0..n*n])
     where
         placeBomb (square, index) = if index `elem` bombIndices then bomb index square Hidden else empty index square Hidden 0
 
 
 -- for each empty cell, count the number of surrounding bombs
 countBombs :: Grid -> Grid
-countBombs (Grid n cells) = Grid n (map count cells)
+countBombs (Grid n cells) = Grid n (V.map count cells)
     where
-        count (Cell i e r Bomb) = bomb i e r
+        count (Cell i e r Bomb) = (Cell i e r Bomb)
         count (Cell i e r (Empty _)) = empty i e r (countNeighbours n i cells)
 
 
 -- find the neighbours of a cell and filter out the empty cells
 -- to find the number of surrounding bombs
-countNeighbours :: Int -> Int -> [Cell] -> Int
+countNeighbours :: Int -> Int -> V.Vector Cell -> Int
 countNeighbours n i cells = length $ filter isBomb neighbours
     where
         neighbours = findNeighbours i n
-        isBomb index = case cells !! index of
-            Cell _ _ _ Bomb -> True
-            _ -> False
+        isBomb index = cellType (cells V.! index) == Bomb
 
 
 -- given an index, return the indices of the surrounding cells
@@ -131,15 +138,30 @@ blockReveal grid index = blockReveal' grid [] index
     where
         blockReveal' (Grid n cells) visited index
             | index `elem` visited = []
-            | otherwise = case cells !! index of
+            | otherwise = case cells V.! index of
                 Cell _ _ _ (Empty 0) -> do
                     let neighbours = findNeighbours index n
                     index : (concatMap (blockReveal' (Grid n cells) (index : visited)) neighbours)
                 otherwise -> [index]
 
 
-updateCell :: Cell -> CellState -> Cell
-updateCell (Cell i e _ t) r = Cell i e r t
+toggleFlagged :: Int -> Grid -> Grid
+toggleFlagged index (Grid n cells) = do
+    let cell = cells V.! index
+    case cellState cell of
+        Hidden -> Grid n (cells V.// [(index, cell { cellState = Flagged })])
+        Flagged -> Grid n (cells V.// [(index, cell { cellState = Hidden })])
+        Revealed -> Grid n cells
+
+updateCells :: [Int] -> Grid -> Grid
+updateCells indexes (Grid n cells) = do
+    let cells' = map (update . getCell) indexes
+    Grid n (cells V.// (zip indexes cells'))
+        where 
+            getCell i = cells V.! i
+            update cell = case cellState cell of
+                Hidden -> cell { cellState = Revealed }
+                _ -> cell
 
     
 -- reveals the cells at the given indices

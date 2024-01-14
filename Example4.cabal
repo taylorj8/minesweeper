@@ -22,4 +22,5 @@ executable Example4
                      , random
                      , random-shuffle
                      , time
+                     , vector
 
