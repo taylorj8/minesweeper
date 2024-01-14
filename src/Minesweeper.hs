@@ -27,16 +27,16 @@ data CellState
 data Cell = Cell Int Element CellState CellType
 
 bomb :: Int -> Element -> CellState -> Cell
-bomb i e r = (i, e, r, Bomb)
+bomb i e r = Cell i e r Bomb
 
 empty :: Int -> Element -> CellState -> Int -> Cell
-empty i e r n = (i, e, r, Empty n)
+empty i e r n = Cell i e r (Empty n)
 
 -- show B for bomb or number in empty cell
-instance Show CellType where
-    show Bomb = "B"
-    show (Empty 0) = " "
-    show (Empty n) = show n
+instance Show Cell where
+    show (Cell _ _ _ Bomb) = "B"
+    show (Cell _ _ _ (Empty 0)) = " "
+    show (Cell _ _ _ (Empty n)) = show n
 
 -- board represented as a list of cells
 data Grid = Grid Int [Cell]
@@ -76,8 +76,8 @@ randSelect' n numBombs firstCell = take numBombs . nub . filter (`notElem` safeC
 
 
 -- place bombs at the given indices
-placeBombs :: Int -> [Int] -> [Element] -> Grid
-placeBombs n bombIndices squares = Grid n (map placeBomb $ zip squares [0..n*n])
+placeBombs :: Int -> [Element] -> [Int] -> Grid
+placeBombs n squares bombIndices  = Grid n (map placeBomb $ zip squares [0..n*n])
     where
         placeBomb (square, index) = if index `elem` bombIndices then bomb index square Hidden else empty index square Hidden 0
 
@@ -86,8 +86,8 @@ placeBombs n bombIndices squares = Grid n (map placeBomb $ zip squares [0..n*n])
 countBombs :: Grid -> Grid
 countBombs (Grid n cells) = Grid n (map count cells)
     where
-        count (i, e, r, Bomb) = bomb i e r
-        count (i, e, r, (Empty _)) = empty i e r (countNeighbours n i cells)
+        count (Cell i e r Bomb) = bomb i e r
+        count (Cell i e r (Empty _)) = empty i e r (countNeighbours n i cells)
 
 
 -- find the neighbours of a cell and filter out the empty cells
@@ -97,7 +97,7 @@ countNeighbours n i cells = length $ filter isBomb neighbours
     where
         neighbours = findNeighbours i n
         isBomb index = case cells !! index of
-            (_, _, Bomb) -> True
+            Cell _ _ _ Bomb -> True
             _ -> False
 
 
@@ -116,7 +116,7 @@ findNeighbours index n = handleEdges [index - n-1, index - n, index - n+1, index
 -- grid is initialised after first cell is revealed
 -- index of first cell is passed to avoid placing a bomb there
 initGrid :: Int -> Int -> Int -> [Element] -> Grid
-initGrid size numBombs firstCell = countBombs $ placeBombs size $ randSelect' size numBombs firstCell
+initGrid size numBombs firstCell squares = countBombs $ placeBombs size squares $ randSelect' size numBombs firstCell
 
 
 -- blockReveal :: Int -> Grid -> Grid
@@ -131,15 +131,15 @@ blockReveal grid index = blockReveal' grid [] index
         blockReveal' (Grid n cells) visited index
             | index `elem` visited = []
             | otherwise = case cells !! index of
-                (_, _, Empty 0) -> do
+                Cell _ _ _ (Empty 0) -> do
                     let neighbours = findNeighbours index n
                     index : (concatMap (blockReveal' (Grid n cells) (index : visited)) neighbours)
                 otherwise -> [index]
 
     
 -- reveals the cells at the given indices
-revealCells :: [Int] -> Grid -> Grid
-revealCells indexes (Grid n cells) = Grid n (map reveal cells)
-    where
-        reveal (i, r, Bomb) = if i `elem` indexes then bomb i True else bomb i r
-        reveal (i, r, (Empty n)) = if i `elem` indexes then empty i True n else empty i r n
+-- revealCells :: [Int] -> Grid -> Grid
+-- revealCells indexes (Grid n cells) = Grid n (map reveal cells)
+--     where
+--         reveal (i, r, Bomb) = if i `elem` indexes then bomb i True else bomb i r
+--         reveal (i, r, (Empty n)) = if i `elem` indexes then empty i True n else empty i r n

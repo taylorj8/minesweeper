@@ -24,6 +24,7 @@ setup :: Window -> UI ()
 setup window = do
     return window # set title "Minesweeper"
 
+
     title <- UI.canvas
         # set UI.width 200
         # set UI.height 20
@@ -36,9 +37,10 @@ setup window = do
     title # UI.fillText "Minesweeper" (10, 32)
 --   state <- liftIO $ newIORef Menu
 
-    squares <- replicateM 25 uiCell
-    gridRef <- liftIO $ newIORef $ initGrid 5 10 0
-    mapM_ (setOnClick window gridRef squares) $ zip squares [0..]
+    let size = 5
+    squares <- replicateM (size*size) uiCell
+    gridRef <- liftIO $ newIORef $ initGrid size 10 0 squares
+    setOnClick gridRef
 
     -- uiGrid <- makeGrid window gridRef 5
 
@@ -46,7 +48,7 @@ setup window = do
     getBody window #+
         [
             element title,
-            makeGrid squares 5
+            makeGrid squares size
         ]
 
     return ()
@@ -56,12 +58,19 @@ makeGrid :: [Element] -> Int -> UI Element
 makeGrid squares n = UI.grid $ chunksOf n (map element squares)
         
 
-setOnClick :: Window -> IORef Grid -> [Element] -> (Element, Int) -> UI ()
-setOnClick win gridRef squares (square, i) = do
+setOnClick :: IORef Grid -> UI ()
+setOnClick gridRef = do
+    (Grid n cells) <- liftIO $ readIORef gridRef
+
+    mapM_ (setOnClick' cells gridRef) cells
+
+
+setOnClick' :: [Cell] -> IORef Grid -> Cell -> UI ()
+setOnClick' cells gridRef (Cell i square r n) = do
     on UI.click square $ \_ -> do
         -- liftIO $ modifyIORef gridRef (blockReveal i)
         grid <- liftIO $ readIORef gridRef
-        revCells i grid squares
+        revealCells i grid
         -- updateCells [i] $ zip squares [0..]
         return ()
 
@@ -86,10 +95,24 @@ uiCell = UI.div # set UI.style [
     ] 
 
 
-revCells :: Int -> Grid -> [Element] -> UI ()
-revCells index (Grid n cells) squares = do
+revealCells :: Int -> Grid -> UI ()
+revealCells index (Grid n cells) = do
     let indexes = blockReveal (Grid n cells) index
-    updateCells indexes $ zip squares [0..]
+    updateCells Revealed indexes cells
+
+
+updateCells :: CellState -> [Int] -> [Cell] -> UI ()
+updateCells state indexes cells = do
+    liftIO $ print indexes
+    mapM_ update cells
+    where
+        update (Cell i square _ _) = if i `elem` indexes 
+            then do 
+                element square 
+                    # set UI.style [("background-color", "white")]
+                    # set UI.text (show i)
+            else return square
+
 
 -- updateCell :: [Cell] -> Window -> Int -> UI ()
 -- updateCell cells win i = do
@@ -107,17 +130,7 @@ revCells index (Grid n cells) squares = do
 --             return ()
 --     return ()
 
-updateCells :: [Int] -> [(Element, Int)] -> UI ()
-updateCells indexes els = do
-    liftIO $ print indexes
-    mapM_ update els
-    where
-        update (square, i) = if i `elem` indexes 
-            then do 
-                element square 
-                    # set UI.style [("background-color", "white")]
-                    # set UI.text (show i)
-            else return square
+
 
 -- todo if refCells doesn't work out
 -- deleteCells :: Window -> Int -> CellType -> UI ()
