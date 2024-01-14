@@ -100,13 +100,13 @@ revealCells index gridRef = do
             case state of
                 Hidden -> do
                     case typ of
-                        Bomb -> V.mapM_ revealBombs cells -- todo end game
-                        (Empty numBombs) -> do
-                            element square 
-                                # set UI.style [("background-color", "white"), ("color", textColor numBombs)]
-                                # set UI.text (show typ)
-                            return ()
-                _ -> return ()
+                        Bomb -> do 
+                            V.mapM_ revealBombs cells -- todo end game
+                            element square # set UI.style [("background-color", "red")]
+                        (Empty numBombs) -> element square 
+                            # set UI.style [("background-color", "white"), ("color", textColor numBombs)]
+                            # set UI.text (show typ)
+                _ -> return square
 
 
 flagCell :: Int -> IORef Grid -> UI Element
@@ -137,6 +137,6 @@ revealBombs :: Cell -> UI Element
 revealBombs (Cell _ square _ typ) = do
     case typ of
         Bomb -> element square 
-            # set UI.style [("background-color", "red")]
+            # set UI.style [("background-color", "white")]
             # set UI.text "💣"
         _ -> return square
