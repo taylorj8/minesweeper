@@ -109,19 +109,24 @@ findNeighbours index n = handleEdges [index - n-1, index - n, index - n+1, index
 initGrid :: Int -> Int -> Int -> Grid
 initGrid size numBombs firstCell = countBombs $ placeBombs size $ randSelect' size numBombs firstCell
 
--- recursive function to reveal all 0 cells
-blockReveal :: Int -> Grid -> Grid
-blockReveal index grid = revealCells (blockReveal' grid index) grid
 
+-- blockReveal :: Int -> Grid -> Grid
+-- blockReveal index grid = revealCells (blockReveal' grid index) grid
+
+-- recursive function to reveal all 0 cells
 -- if a cell contains 0, recurse to neighbours
 -- concatenate results to get the indices of cells to be revealed
-blockReveal' :: Grid -> Int -> [Int]
-blockReveal' (Grid n cells) index = do
-    case cells !! index of
-        (_, _, Empty 0) -> do
-            let neighbours = findNeighbours index n
-            index : (concatMap (blockReveal' (Grid n cells)) neighbours)
-        otherwise -> [index]
+blockReveal :: Grid -> Int -> [Int]
+blockReveal grid index = blockReveal' grid [] index
+    where
+        blockReveal' (Grid n cells) visited index
+            | index `elem` visited = []
+            | otherwise = case cells !! index of
+                (_, _, Empty 0) -> do
+                    let neighbours = findNeighbours index n
+                    index : (concatMap (blockReveal' (Grid n cells) (index : visited)) neighbours)
+                otherwise -> [index]
+
     
 -- reveals the cells at the given indices
 revealCells :: [Int] -> Grid -> Grid

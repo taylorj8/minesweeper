@@ -58,7 +58,6 @@ makeGrid squares n = UI.grid $ chunksOf n (map element squares)
 setOnClick :: Window -> IORef Grid -> [Element] -> (Element, Int) -> UI ()
 setOnClick win gridRef squares (square, i) = do
     on UI.click square $ \_ -> do
-        liftIO $ print i
         -- liftIO $ modifyIORef gridRef (blockReveal i)
         grid <- liftIO $ readIORef gridRef
         revCells i grid squares
@@ -68,21 +67,27 @@ setOnClick win gridRef squares (square, i) = do
 
 -- todo use IORef to update board
 uiCell :: UI Element
-uiCell = UI.canvas # set UI.style [
-        ("width", "30px"),
-        ("height", "30px"),
+uiCell = UI.div # set UI.style [
+        ("width", "35px"),
+        ("height", "35px"),
+        ("line-height", "35px"),
         ("background-color", "lightgrey"),
         ("border", "1px solid black"),
+        ("position", "relative"),
         ("text-align", "center"),
         ("font-size", "20px"),
         ("font-family", "sans-serif"),
-        ("color", "black")
+        ("color", "black"),
+        ("display", "inline-block"),
+        ("vertical-align", "top"),
+        ("overflow", "hidden"),
+        ("user-select", "none")
     ] 
 
 
 revCells :: Int -> Grid -> [Element] -> UI ()
 revCells index (Grid n cells) squares = do
-    let indexes = blockReveal' (Grid n cells) index
+    let indexes = blockReveal (Grid n cells) index
     updateCells indexes $ zip squares [0..]
 
 -- updateCell :: [Cell] -> Window -> Int -> UI ()
@@ -102,7 +107,9 @@ revCells index (Grid n cells) squares = do
 --     return ()
 
 updateCells :: [Int] -> [(Element, Int)] -> UI ()
-updateCells indexes = mapM_ update
+updateCells indexes els = do
+    liftIO $ print indexes
+    mapM_ update els
     where
         update (square, i) = if i `elem` indexes 
             then do 
