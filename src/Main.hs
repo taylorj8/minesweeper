@@ -39,9 +39,9 @@ setup window = do
     title # UI.fillText "Minesweeper" (10, 32)
 --   state <- liftIO $ newIORef Menu
 
-    let size = 5
+    let size = 6
     squares <- replicateM (size*size) uiCell
-    gridRef <- liftIO $ newIORef $ initGrid size 10 0 squares
+    gridRef <- liftIO $ newIORef $ initGrid size 12 7 squares
     setOnClick gridRef
 
     getBody window #+
@@ -100,14 +100,13 @@ revealCells index gridRef = do
             case state of
                 Hidden -> do
                     case typ of
-                        Bomb -> do -- todo end game
+                        Bomb -> V.mapM_ revealBombs cells -- todo end game
+                        (Empty numBombs) -> do
                             element square 
-                                # set UI.style [("background-color", "red")]
-                                # set UI.text "💣"
-                        (Empty numBombs) -> element square 
                                 # set UI.style [("background-color", "white"), ("color", textColor numBombs)]
                                 # set UI.text (show typ)
-                _ -> return square
+                            return ()
+                _ -> return ()
 
 
 flagCell :: Int -> IORef Grid -> UI Element
@@ -134,37 +133,10 @@ textColor n = case n of
     _ -> "white"
 
 
--- todo if refCells doesn't work out
--- deleteCells :: Window -> Int -> CellType -> UI ()
--- deleteCells win i cell = do
---     el <- UI.getElementById win (show i)
---     case el of 
---         Nothing -> return ()
---         Just test -> delete test
---     case cell of 
---         Bomb -> return () -- lose condition?
---         Empty n -> do
---             case n of 
---                 0 -> do
---                     let neighbours = findNeighbours i 5
---                     map deleteCells win 
---                     return ()
---                 _ -> return ()
-
-
-
--- revealCell :: Int -> IORef [Bool] -> UI ()
--- revealCell i revRef = do
---     rev <- liftIO $ readIORef revRef
---     liftIO $ writeIORef revRef (take i rev ++ [True] ++ drop (i+1) rev)
---     return ()
-
-
--- populateGrid :: Int -> [[UI Element]]
--- populateGrid n = replicate n (replicate n $ cell False Null)
-
--- initialGrid :: Int -> UI [Element]
--- initialGrid n = [cell False Null | _ <- [1..n*n]]
-
--- uiGrid :: Grid -> [Bool] -> [UI Element]
--- uiGrid (Grid n cells) revealed = zipWith cell revealed cells
+revealBombs :: Cell -> UI Element
+revealBombs (Cell _ square _ typ) = do
+    case typ of
+        Bomb -> element square 
+            # set UI.style [("background-color", "red")]
+            # set UI.text "💣"
+        _ -> return square
