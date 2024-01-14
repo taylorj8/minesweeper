@@ -49,7 +49,11 @@ instance Show CellType where
 
 -- board represented as a vector of cells
 -- a vector is used as accessing cells by index is needed frequently
-data Grid = Grid Int (V.Vector Cell)
+data Grid = Grid {
+    size :: Int,
+    cells :: (V.Vector Cell)
+}
+
 
 -- show grid in 2D format
 instance Show Grid where
@@ -86,10 +90,10 @@ randSelect' n numBombs firstCell = take numBombs . nub . filter (`notElem` safeC
 
 
 -- place bombs at the given indices
-placeBombs :: Int -> [Element] -> [Int] -> Grid
-placeBombs n squares bombIndices = Grid n $ V.fromList (map placeBomb $ zip squares [0..n*n])
+placeBombs :: Grid -> [Int] -> Grid
+placeBombs (Grid n cells) bombIndices = Grid n (V.map placeBomb cells)
     where
-        placeBomb (square, index) = if index `elem` bombIndices then bomb index square Hidden else empty index square Hidden 0
+        placeBomb (Cell index square _ _) = if index `elem` bombIndices then bomb index square Hidden else empty index square Hidden 0
 
 
 -- for each empty cell, count the number of surrounding bombs
@@ -123,9 +127,14 @@ findNeighbours index n = handleEdges [index - n-1, index - n, index - n+1, index
 -- get list of bomb positions, place the bombs and find the surrounding bomb count for empty cells
 -- grid is initialised after first cell is revealed
 -- index of first cell is passed to avoid placing a bomb there
-initGrid :: Int -> Int -> Int -> [Element] -> Grid
-initGrid size numBombs firstCell squares = countBombs $ placeBombs size squares $ randSelect' size numBombs firstCell
+resetGrid :: Int -> Int -> Grid -> Grid
+resetGrid numBombs firstCell grid = countBombs $ placeBombs grid $ randSelect' (size grid) numBombs firstCell
 
+emptyGrid :: Int -> [Element] -> Grid
+emptyGrid size squares = Grid size $ V.fromList $ map (blankCell) (zip squares [0..])
+
+blankCell :: (Element, Int) -> Cell
+blankCell (e, i) = Cell i e Hidden (Empty 0)
 
 -- blockReveal :: Int -> Grid -> Grid
 -- blockReveal index grid = revealCells (blockReveal' grid index) grid
@@ -136,12 +145,12 @@ initGrid size numBombs firstCell squares = countBombs $ placeBombs size squares 
 blockReveal :: Grid -> Int -> [Int]
 blockReveal grid index = blockReveal' grid [] index
     where
-        blockReveal' (Grid n cells) visited index
+        blockReveal' grid visited index
             | index `elem` visited = []
-            | otherwise = case cells V.! index of
+            | otherwise = case (cells grid) V.! index of
                 Cell _ _ _ (Empty 0) -> do
-                    let neighbours = findNeighbours index n
-                    index : (concatMap (blockReveal' (Grid n cells) (index : visited)) neighbours)
+                    let neighbours = findNeighbours index (size grid)
+                    index : (concatMap (blockReveal' grid (index : visited)) neighbours)
                 otherwise -> [index]
 
 
