@@ -39,8 +39,8 @@ setup window = do
 
     let size = 5
     squares <- replicateM (size*size) uiCell
-    gridRef <- liftIO $ newIORef $ initGrid size 10 0 squares
-    setOnClick gridRef
+    let grid = initGrid size 10 0 squares
+    setOnClick grid
 
     -- uiGrid <- makeGrid window gridRef 5
 
@@ -58,21 +58,14 @@ makeGrid :: [Element] -> Int -> UI Element
 makeGrid squares n = UI.grid $ chunksOf n (map element squares)
         
 
-setOnClick :: IORef Grid -> UI ()
-setOnClick gridRef = do
-    (Grid n cells) <- liftIO $ readIORef gridRef
-
-    mapM_ (setOnClick' cells gridRef) cells
+setOnClick :: Grid -> UI ()
+setOnClick (Grid n cells) = mapM_ (setOnClick' cells (Grid n cells)) cells
 
 
-setOnClick' :: [Cell] -> IORef Grid -> Cell -> UI ()
-setOnClick' cells gridRef (Cell i square r n) = do
-    on UI.click square $ \_ -> do
+setOnClick' :: [Cell] -> Grid -> Cell -> UI ()
+setOnClick' cells grid (Cell i square r n) = on UI.click square $ \_ -> revealCells i grid
         -- liftIO $ modifyIORef gridRef (blockReveal i)
-        grid <- liftIO $ readIORef gridRef
-        revealCells i grid
         -- updateCells [i] $ zip squares [0..]
-        return ()
 
 
 -- todo use IORef to update board
