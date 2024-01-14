@@ -41,9 +41,7 @@ setup window = do
     squares <- replicateM (size*size) uiCell
     let grid = initGrid size 10 0 squares
     setOnClick grid
-
-    -- uiGrid <- makeGrid window gridRef 5
-
+    gridRef <- liftIO $ newIORef grid
 
     getBody window #+
         [
@@ -58,8 +56,10 @@ makeGrid :: [Element] -> Int -> UI Element
 makeGrid squares n = UI.grid $ chunksOf n (map element squares)
         
 
-setOnClick :: Grid -> UI ()
-setOnClick (Grid n cells) = mapM_ (setOnClick' (Grid n cells)) cells
+setOnClick :: IORef Grid-> UI ()
+setOnClick gridRef = do 
+    (Grid n cells) <- liftIO $ readIORef gridRef
+    mapM_ (setOnClick' (Grid n cells)) cells
 
 
 setOnClick' :: Grid -> Cell -> UI ()
@@ -96,32 +96,33 @@ revealCells :: Int -> Grid -> UI ()
 revealCells index (Grid n cells) = mapM_ update cells
     where
         indexes = blockReveal (Grid n cells) index
-        update (Cell i square curState typ) = if i `elem` indexes 
-            then case typ of
-                Bomb -> do -- todo end game
-                    element square 
-                        # set UI.style [("background-color", "red")]
-                        # set UI.text "💣"
-                _ -> case curState of
-                    Hidden -> 
+        update (Cell i square state typ) = if i `elem` indexes 
+            then case state of
+                Hidden -> case typ of
+                    Bomb -> do -- todo end game
                         element square 
-                            # set UI.style [("background-color", "white"), ("color", textColor typ)]
+                            # set UI.style [("background-color", "red")]
+                            # set UI.text "💣"
+                    (Empty numBombs) -> element square 
+                            # set UI.style [("background-color", "white"), ("color", textColor numBombs)]
                             # set UI.text (show typ)
-                    _ -> return square
+                _ -> return square
             else return square
 
 
-flagCell :: Int -> Grid -> UI Element
-flagCell index (Grid _ cells) = do
+flagCell :: Int -> IORef Grid -> UI Element
+flagCell index gridRef = do
+    (Grid n cells) <- liftIO $ readIORef gridRef
     let (Cell _ square state _) = cells !! index
+
     case state of
         Hidden -> element square # set UI.text "🚩"
         Flagged -> element square # set UI.text ""
         _ -> return square
     
 
-textColor :: CellType -> String
-textColor (Empty n) = case n of
+textColor :: Int -> String
+textColor n = case n of
     1 -> "blue"
     2 -> "green"
     3 -> "red"
@@ -131,7 +132,6 @@ textColor (Empty n) = case n of
     7 -> "black"
     8 -> "grey"
     _ -> "white"
-textColor _ = "white"
 
 -- updateCell :: [Cell] -> Window -> Int -> UI ()
 -- updateCell cells win i = do

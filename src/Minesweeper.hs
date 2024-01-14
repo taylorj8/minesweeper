@@ -137,6 +137,10 @@ blockReveal grid index = blockReveal' grid [] index
                     index : (concatMap (blockReveal' (Grid n cells) (index : visited)) neighbours)
                 otherwise -> [index]
 
+
+updateCell :: Cell -> CellState -> Cell
+updateCell (Cell i e _ t) r = Cell i e r t
+
     
 -- reveals the cells at the given indices
 -- revealCells :: [Int] -> Grid -> Grid
