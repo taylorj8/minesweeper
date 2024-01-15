@@ -71,13 +71,11 @@ onClick index gridRef stateRef = do
         GameStart numBombs -> do
             (Grid n _ _) <- liftIO $ readIORef gridRef
             liftIO $ writeIORef stateRef $ Playing (n*n - numBombs, numBombs)
-            liftIO $ print $ n*n - numBombs
             seed <- liftIO sysTime
             liftIO $ modifyIORef gridRef $ resetGrid numBombs index seed
             revealCells index gridRef stateRef
         Playing (t, _) -> do
             grid <- liftIO $ readIORef gridRef
-            liftIO $ print t
             when (cellState (grid `getCell` index) == Hidden) $ revealCells index gridRef stateRef
         _ -> return ()
 
@@ -100,7 +98,7 @@ revealCell grid stateRef index = do
         Hidden -> do
             case typ of
                 Bomb -> do
-                    V.mapM_ (fillBomb False) (cells grid)
+                    V.mapM_ (fillBomb GameOver) (cells grid)
                     liftIO $ writeIORef stateRef GameOver
                     element square # set UI.style [("background-color", "red")]
                     element (fst $ top grid) # set UI.text "Game Over"
@@ -115,7 +113,7 @@ trackRemainingCells grid stateRef num = do
     state <- liftIO $ readIORef stateRef
     let state' = trackRemainingCells' num state
     when (state' == Win) $ do
-        V.mapM_ (fillBomb True) (cells grid)
+        V.mapM_ (fillBomb state') (cells grid)
         element (fst $ top grid) # set UI.text "You Win!"
         element (snd $ top grid) # set UI.text "0"
         return ()
@@ -147,6 +145,7 @@ flagCell index gridRef stateRef = do
                 _ -> element (square cell)
             return ()
         _ -> return ()
+
 
 handleCounter :: (Int -> Int -> Int) -> GameState -> GameState
 handleCounter op (Playing (t, c)) = Playing (t, c `op` 1)
@@ -183,12 +182,11 @@ textColor n = case n of
     _ -> "white"
 
 
-fillBomb :: Bool -> Cell -> UI Element
-fillBomb won (Cell _ square _ typ) = do
-    case typ of
-        Bomb -> if won then element square
-                    # set UI.text "🚩" 
-                else element square
-                    # set UI.style [("background-color", "white")]
-                    # set UI.text "💣"
+fillBomb :: GameState -> Cell -> UI Element
+fillBomb state (Cell _ square _ typ) = do
+    case (state, typ) of
+        (Win, Bomb) -> element square # set UI.text "🚩" 
+        (GameOver, Bomb) -> element square
+            # set UI.style [("background-color", "white")]
+            # set UI.text "💣"
         _ -> return square
