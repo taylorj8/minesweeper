@@ -1,4 +1,4 @@
-name:                Example4
+name:                Minesweeper
 version:             0.1.0.0
 synopsis:            Simple project template from stack
 license:             BSD3
@@ -9,10 +9,10 @@ category:            test
 build-type:          Simple
 cabal-version:       >=1.10
 
-executable Example4
+executable Minesweeper
   hs-source-dirs:      src
   main-is:             Main.hs
-  other-modules:       Minesweeper
+  other-modules:       Minesweeper, Components
   default-language:    Haskell2010
   build-depends:       base >= 4.7 && < 5
                      , mtl
@@ -20,6 +20,6 @@ executable Example4
                      , threepenny-gui
                      , split
                      , random
-                     , random-shuffle
                      , time
+                     , vector
 
