@@ -4,6 +4,8 @@ import qualified Graphics.UI.Threepenny as UI
 import Graphics.UI.Threepenny.Core
 import Data.List.Split (chunksOf)
 
+-- file contains various UI components
+
 makeTitle :: UI Element
 makeTitle = UI.div
         # set UI.text "Minesweeper"

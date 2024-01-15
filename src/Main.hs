@@ -211,7 +211,7 @@ handleRestart gridRef stateRef numBombs = do
 
 -- update the UI of all bomb cells depending on game state
 fillBombs :: GameState -> V.Vector Cell -> UI ()
-fillBombs state = V.mapM_ (fillBomb GameOver)
+fillBombs state = V.mapM_ (fillBomb state)
     where
         fillBomb state (Cell _ square _ typ) = do
             case (state, typ) of
