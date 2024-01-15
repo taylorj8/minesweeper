@@ -34,20 +34,23 @@ setup window = do
 
     title <- makeTitle
 
-    let size = 6
-    let numBombs = 3
+    let size = 16
+    let numBombs = 40
     stateRef <- liftIO $ newIORef $ GameStart numBombs
-    bombCounter <- makeBombCounter numBombs
+    bombCounter <- topCell (show numBombs)
     squares <- replicateM (size*size) uiCell
     gridRef <- liftIO $ newIORef $ emptyGrid size (title, bombCounter) squares
     setOnClick gridRef stateRef
 
-    restartButton <- makeRestartButton
+    restartButton <- topCell "↺"
     on UI.click restartButton $ \_ -> handleRestart gridRef stateRef numBombs
+
+    row <- UI.row [element bombCounter, element title, element restartButton]
+    element row # set UI.style [("margin", "auto")]
 
     getBody window #+
         [
-            row [element bombCounter, element title, element restartButton],
+            UI.div #+ [element row],
             displayGrid squares size
         ]
 
@@ -84,7 +87,6 @@ revealCells :: Int -> IORef Grid -> IORef GameState -> UI ()
 revealCells index gridRef stateRef = do
     grid <- liftIO $ readIORef gridRef
     let indexes = revealIndexes grid index
-    liftIO $ print indexes
     let (grid', cellsRevealed) = updateCells indexes grid
     trackRemainingCells grid stateRef cellsRevealed
     mapM_ (revealCell grid stateRef) indexes

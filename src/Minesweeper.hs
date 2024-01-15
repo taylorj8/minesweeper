@@ -62,20 +62,6 @@ instance Show Grid where
             showRow = unwords . map show
 
 
--- -- BROKEN - random.shuffle not working with ThreePenny
--- -- randomly select numBombs indexes from a list of size n*n for placing bombs
--- -- generate list with all potential indexes, remove safe cells, randomly shuffle and select first numBombs
--- -- safeCells can't have bombs - first cell revealed and its neighbours
--- randSelect :: Int -> Int -> Int -> [Int]
--- randSelect n numBombs firstCell = take numBombs potentialCells
---     where
---         potentialCells = shuffle' ([0..n*n-1] \\ safeCells) (n*n-1) (mkStdGen timeSinceEpoch)
---         safeCells = firstCell : findNeighbours firstCell n
---         timeSinceEpoch = floor . nominalDiffTimeToSeconds . utcTimeToPOSIXSeconds $ unsafePerformIO getCurrentTime
---         -- system time (converted to Int) used as seed for random number generator
---         -- unsafePerformIO used to avoid returning IO Int
-
-
 -- randomly select numBombs indexes from a list of size n*n for placing bombs
 -- nub removes duplicates from the random number stream
 -- safeCells can't have bombs - first cell revealed and its neighbours

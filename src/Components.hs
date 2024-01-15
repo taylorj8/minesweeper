@@ -9,11 +9,10 @@ makeTitle :: UI Element
 makeTitle = UI.div
         # set UI.text "Minesweeper"
         # set UI.style [
-            ("width", "100%"),
-            ("height", "50px"),
-            ("line-height", "50px"),
+            ("width", "250px"),
+            ("height", "40px"),
             ("text-align", "center"),
-            ("font-size", "20px"),
+            ("font-size", "22px"),
             ("font-family", "sans-serif"),
             ("font-weight", "bold"),
             ("user-select", "none")
@@ -26,42 +25,21 @@ displayGrid squares n = UI.div #+ [
             # set UI.style [("margin", "auto"), ("border", "1px solid black")]
     ]
 
-makeRestartButton :: UI Element
-makeRestartButton = UI.div #+ [
-        UI.button # set UI.text "↺"
-            # set UI.style [
-                ("margin", "auto"), 
-                ("width", "40px"),
-                ("height", "40px"),
-                ("line-height", "40px"),
-                ("background-color", "lightgrey"),
-                ("border", "1px solid black"),
-                ("text-align", "center"),
-                ("font-size", "22px"),
-                ("font-family", "sans-serif"),
-                ("font-weight", "bold"),
-                ("display", "inline-block"),
-                ("vertical-align", "top"),
-                ("user-select", "none")
-            ]
-    ]
-
-makeBombCounter :: Int -> UI Element
-makeBombCounter numBombs = UI.div 
-    # set UI.text (show numBombs)
+topCell :: String -> UI Element
+topCell text = UI.div 
+    # set UI.text text
     # set UI.style [
-        ("margin", "auto"), 
         ("width", "40px"),
         ("height", "40px"),
         ("line-height", "40px"),
         ("background-color", "lightgrey"),
-        ("border", "1px solid black"),
+        ("border", "2px solid black"),
         ("text-align", "center"),
         ("font-size", "22px"),
         ("font-family", "sans-serif"),
         ("font-weight", "bold"),
         ("display", "inline-block"),
-        ("vertical-align", "top"),
+        ("vertical-align", "center"),
         ("user-select", "none")
     ]
 
