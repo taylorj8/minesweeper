@@ -64,7 +64,7 @@ setup window = do
 displayGrid :: [Element] -> Int -> UI Element
 displayGrid squares n = UI.div #+ [
         UI.grid (chunksOf n $ map element squares) 
-            # set UI.style [("margin", "auto")]
+            # set UI.style [("margin", "auto"), ("border", "1px solid black")]
     ]
         
 setOnClick :: IORef Grid -> IORef GameState -> UI ()
@@ -109,7 +109,8 @@ onClick index gridRef stateRef = do
 revealCells :: Int -> IORef Grid -> IORef GameState -> UI ()
 revealCells index gridRef stateRef = do
     grid <- liftIO $ readIORef gridRef
-    let indexes = blockReveal grid index
+    let indexes = revealIndexes grid index
+    liftIO $ print indexes
     mapM_ (update grid) indexes
     liftIO $ writeIORef gridRef $ updateCells indexes grid
     where

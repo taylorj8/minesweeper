@@ -3,7 +3,7 @@ module Minesweeper where
 {-# LANGUAGE BangPatterns #-}
 
 import System.Random (mkStdGen, randomRs)
-import Data.List (nub, (\\), concatMap)
+import Data.List (nub, (\\), concatMap, union)
 import Data.Time (getCurrentTime, nominalDiffTimeToSeconds)
 import Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
 import System.IO.Unsafe (unsafePerformIO)
@@ -136,22 +136,20 @@ emptyGrid size squares = Grid size $ V.fromList $ map (blankCell) (zip squares [
 blankCell :: (Element, Int) -> Cell
 blankCell (e, i) = Cell i e Hidden (Empty 0)
 
--- blockReveal :: Int -> Grid -> Grid
--- blockReveal index grid = revealCells (blockReveal' grid index) grid
 
 -- recursive function to reveal all 0 cells
--- if a cell contains 0, recurse to neighbours
--- concatenate results to get the indices of cells to be revealed
-blockReveal :: Grid -> Int -> [Int]
-blockReveal grid index = blockReveal' grid [] index
+-- keeps track of two lists - indexes of cells to reveal and indexes to be checked
+-- if a cell contains 0, get the difference between its neighbours and the indexes to be revealed
+-- add this to both lists, recurse until no more cells to check
+revealIndexes :: Grid -> Int -> [Int]
+revealIndexes grid index = revealIndexes' grid [index] [index]
     where
-        blockReveal' grid visited index
-            | index `elem` visited = []
-            | otherwise = case (cells grid) V.! index of
-                Cell _ _ _ (Empty 0) -> do
-                    let neighbours = findNeighbours index (size grid)
-                    index : (concatMap (blockReveal' grid (index : visited)) neighbours)
-                otherwise -> [index]
+        revealIndexes' grid indexes [] = indexes
+        revealIndexes' grid indexes (current : rest) = case (cells grid) V.! current of
+            Cell _ _ _ (Empty 0) -> do
+                let newNeighbours = (findNeighbours current (size grid)) \\ indexes
+                revealIndexes' grid (indexes ++ newNeighbours) (rest ++ newNeighbours)
+            otherwise -> revealIndexes' grid indexes rest
 
 
 toggleFlagged :: Int -> Grid -> Grid

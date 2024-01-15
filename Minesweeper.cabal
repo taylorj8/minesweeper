@@ -23,4 +23,6 @@ executable Minesweeper
                      , random-shuffle
                      , time
                      , vector
+                     , unordered-containers
+                     , ordered-containers 
 
