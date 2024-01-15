@@ -21,7 +21,27 @@ makeRestartButton = UI.div #+ [
                 ("background-color", "lightgrey"),
                 ("border", "1px solid black"),
                 ("text-align", "center"),
-                ("font-size", "20px"),
+                ("font-size", "22px"),
+                ("font-family", "sans-serif"),
+                ("font-weight", "bold"),
+                ("display", "inline-block"),
+                ("vertical-align", "top"),
+                ("user-select", "none")
+            ]
+    ]
+
+makeBombCounter :: Int -> UI Element
+makeBombCounter numBombs = UI.div #+ [
+        UI.button # set UI.text (show numBombs)
+            # set UI.style [
+                ("margin", "auto"), 
+                ("width", "40px"),
+                ("height", "40px"),
+                ("line-height", "40px"),
+                ("background-color", "lightgrey"),
+                ("border", "1px solid black"),
+                ("text-align", "center"),
+                ("font-size", "22px"),
                 ("font-family", "sans-serif"),
                 ("font-weight", "bold"),
                 ("display", "inline-block"),

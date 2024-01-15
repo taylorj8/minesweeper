@@ -47,18 +47,18 @@ setup window = do
     let size = 16
     let numBombs = 40
     stateRef <- liftIO $ newIORef $ GameStart (size, numBombs)
+    bombCounter <- makeBombCounter numBombs
     squares <- replicateM (size*size) uiCell
-    gridRef <- liftIO $ newIORef $ emptyGrid size squares
+    gridRef <- liftIO $ newIORef $ emptyGrid size bombCounter squares
     setOnClick gridRef stateRef
 
     restartButton <- makeRestartButton
-    on UI.click restartButton $ \_ -> handleRestart gridRef stateRef
+    on UI.click restartButton $ \_ -> handleRestart gridRef stateRef numBombs
 
     getBody window #+
         [
-            element title,
-            displayGrid squares size,
-            element restartButton
+            row [element bombCounter, element title, element restartButton],
+            displayGrid squares size
         ]
 
     return ()
@@ -66,7 +66,7 @@ setup window = do
 
 setOnClick :: IORef Grid -> IORef GameState -> UI ()
 setOnClick gridRef stateRef = do
-    (Grid n cells) <- liftIO $ readIORef gridRef
+    (Grid n _ cells) <- liftIO $ readIORef gridRef
     mapM_ (clickHandlers gridRef) cells
         where
             clickHandlers gridRef (Cell i square state _) = do
@@ -74,7 +74,6 @@ setOnClick gridRef stateRef = do
                 on UI.contextmenu square $ \_ -> flagCell i gridRef stateRef
 
 
--- todo update state
 onClick :: Int -> IORef Grid -> IORef GameState -> UI ()
 onClick index gridRef stateRef = do
     gameState <- liftIO $ readIORef stateRef
@@ -118,30 +117,42 @@ flagCell :: Int -> IORef Grid -> IORef GameState -> UI ()
 flagCell index gridRef stateRef = do
     gameState <- liftIO $ readIORef stateRef
     case gameState of
-        Playing _ -> do
+        Playing numBombs -> do
             grid <- liftIO $ readIORef gridRef
             let cell = cells grid V.! index
             liftIO $ writeIORef gridRef $ toggleFlagged index grid
             case cellState cell of
-                Hidden -> element (square cell) # set UI.text "🚩"
-                Flagged -> element (square cell) # set UI.text ""
+                Hidden -> do
+                    liftIO $ modifyIORef stateRef $ handleCounter (-)
+                    element (counter grid) # set UI.text (show $ numBombs-1)
+                    element (square cell) # set UI.text "🚩"
+                Flagged -> do
+                    liftIO $ modifyIORef stateRef $ handleCounter (+)
+                    element (counter grid) # set UI.text (show $ numBombs+1)
+                    element (square cell) # set UI.text ""
                 _ -> element (square cell)
             return ()
         _ -> return ()
 
+handleCounter :: (Int -> Int -> Int) -> GameState -> GameState
+handleCounter op (Playing b) = Playing (b `op` 1)
+handleCounter _ s = s
 
-handleRestart :: IORef Grid -> IORef GameState -> UI ()
-handleRestart gridRef stateRef = do
-    Grid n cells <- liftIO $ readIORef gridRef
-    liftIO $ writeIORef stateRef (GameStart (n, 40))
+
+handleRestart :: IORef Grid -> IORef GameState -> Int -> UI ()
+handleRestart gridRef stateRef numBombs = do
+    Grid n c cells <- liftIO $ readIORef gridRef
+    resetCounter c numBombs
+    liftIO $ writeIORef stateRef (GameStart (n, numBombs))
     V.mapM_ resetSquare cells
-    liftIO $ modifyIORef gridRef wipeGrid
+    liftIO $ modifyIORef gridRef $ wipeGrid c
         where
-        wipeGrid (Grid n cells) = Grid n (V.map resetCell cells)
-        resetCell (Cell index square _ _) = Cell index square Hidden (Empty 0)
-        resetSquare (Cell _ square _ _) = element square
-            # set UI.style [("background-color", "lightgrey"), ("color", "black")]
-            # set UI.text ""
+            wipeGrid c (Grid n _ cells) = Grid n c (V.map resetCell cells)
+            resetCell (Cell index square _ _) = Cell index square Hidden (Empty 0)
+            resetSquare (Cell _ square _ _) = element square
+                # set UI.style [("background-color", "lightgrey"), ("color", "black")]
+                # set UI.text ""
+            resetCounter counter numBombs = element counter # set UI.text (show numBombs)
 
 textColor :: Int -> String
 textColor n = case n of

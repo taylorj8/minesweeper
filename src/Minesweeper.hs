@@ -49,13 +49,14 @@ instance Show CellType where
 -- a vector is used as accessing cells by index is needed frequently
 data Grid = Grid {
     size :: Int,
+    counter :: Element,
     cells :: (V.Vector Cell)
 }
 
 
 -- show grid in 2D format
 instance Show Grid where
-    show (Grid n cells) = unlines $ map showRow rows
+    show (Grid n _ cells) = unlines $ map showRow rows
         where
             rows = [take n $ drop (i*n) $ V.toList cells | i <- [0..n-1]]
             showRow = unwords . map show
@@ -92,14 +93,14 @@ sysTime = do
 
 -- place bombs at the given indices
 placeBombs :: Grid -> [Int] -> Grid
-placeBombs (Grid n cells) bombIndices = Grid n (V.map placeBomb cells)
+placeBombs (Grid n c cells) bombIndices = Grid n c (V.map placeBomb cells)
     where
         placeBomb (Cell index square _ _) = if index `elem` bombIndices then bomb index square Hidden else empty index square Hidden 0
 
 
 -- for each empty cell, count the number of surrounding bombs
 countBombs :: Grid -> Grid
-countBombs (Grid n cells) = Grid n (V.map count cells)
+countBombs (Grid n c cells) = Grid n c (V.map count cells)
     where
         count (Cell i e r Bomb) = (Cell i e r Bomb)
         count (Cell i e r (Empty _)) = empty i e r (countNeighbours n i cells)
@@ -131,14 +132,14 @@ findNeighbours index n = handleEdges [index - n-1, index - n, index - n+1, index
 resetGrid :: Int -> Int -> Int -> Grid -> Grid
 resetGrid numBombs firstCell seed grid = countBombs $ placeBombs grid $ randSelect (size grid) numBombs firstCell seed
 
-emptyGrid :: Int -> [Element] -> Grid
-emptyGrid size squares = Grid size $ V.fromList $ map (blankCell) (zip squares [0..])
+emptyGrid :: Int -> Element -> [Element] -> Grid
+emptyGrid size counter squares = Grid size counter $ V.fromList $ map (blankCell) (zip squares [0..])
 
 blankCell :: (Element, Int) -> Cell
 blankCell (e, i) = Cell i e Hidden (Empty 0)
 
 getCell :: Grid -> Int -> Cell
-getCell (Grid _ cells) index = cells V.! index
+getCell (Grid _ _ cells) index = cells V.! index
 
 
 -- recursive function to reveal all 0 cells
@@ -157,17 +158,17 @@ revealIndexes grid index = revealIndexes' grid [index] [index]
 
 
 toggleFlagged :: Int -> Grid -> Grid
-toggleFlagged index (Grid n cells) = do
+toggleFlagged index (Grid n c cells) = do
     let cell = cells V.! index
     case cellState cell of
-        Hidden -> Grid n (cells V.// [(index, cell { cellState = Flagged })])
-        Flagged -> Grid n (cells V.// [(index, cell { cellState = Hidden })])
-        Revealed -> Grid n cells
+        Hidden -> Grid n c (cells V.// [(index, cell { cellState = Flagged })])
+        Flagged -> Grid n c (cells V.// [(index, cell { cellState = Hidden })])
+        Revealed -> Grid n c cells
 
 updateCells :: [Int] -> Grid -> Grid
-updateCells indexes (Grid n cells) = do
+updateCells indexes (Grid n c cells) = do
     let cells' = map (update . getCell) indexes
-    Grid n (cells V.// (zip indexes cells'))
+    Grid n c (cells V.// (zip indexes cells'))
         where 
             getCell i = cells V.! i
             update cell = case cellState cell of
