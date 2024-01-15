@@ -6,8 +6,6 @@ import System.Random (mkStdGen, randomRs)
 import Data.List (nub, (\\), concatMap, union)
 import Data.Time (getCurrentTime, nominalDiffTimeToSeconds)
 import Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
-import System.IO.Unsafe (unsafePerformIO)
-import System.Random.Shuffle (shuffle')
 import qualified Data.Vector as V
 
 import Graphics.UI.Threepenny.Core (Element)
@@ -63,30 +61,33 @@ instance Show Grid where
             showRow = unwords . map show
 
 
--- BROKEN - random.shuffle not working with ThreePenny
--- randomly select numBombs indexes from a list of size n*n for placing bombs
--- generate list with all potential indexes, remove safe cells, randomly shuffle and select first numBombs
--- safeCells can't have bombs - first cell revealed and its neighbours
-randSelect :: Int -> Int -> Int -> [Int]
-randSelect n numBombs firstCell = take numBombs potentialCells
-    where
-        potentialCells = shuffle' ([0..n*n-1] \\ safeCells) (n*n-1) (mkStdGen timeSinceEpoch)
-        safeCells = firstCell : findNeighbours firstCell n
-        timeSinceEpoch = floor . nominalDiffTimeToSeconds . utcTimeToPOSIXSeconds $ unsafePerformIO getCurrentTime
-        -- system time (converted to Int) used as seed for random number generator
-        -- unsafePerformIO used to avoid returning IO Int
+-- -- BROKEN - random.shuffle not working with ThreePenny
+-- -- randomly select numBombs indexes from a list of size n*n for placing bombs
+-- -- generate list with all potential indexes, remove safe cells, randomly shuffle and select first numBombs
+-- -- safeCells can't have bombs - first cell revealed and its neighbours
+-- randSelect :: Int -> Int -> Int -> [Int]
+-- randSelect n numBombs firstCell = take numBombs potentialCells
+--     where
+--         potentialCells = shuffle' ([0..n*n-1] \\ safeCells) (n*n-1) (mkStdGen timeSinceEpoch)
+--         safeCells = firstCell : findNeighbours firstCell n
+--         timeSinceEpoch = floor . nominalDiffTimeToSeconds . utcTimeToPOSIXSeconds $ unsafePerformIO getCurrentTime
+--         -- system time (converted to Int) used as seed for random number generator
+--         -- unsafePerformIO used to avoid returning IO Int
 
 
 -- randomly select numBombs indexes from a list of size n*n for placing bombs
 -- nub removes duplicates from the random number stream
 -- safeCells can't have bombs - first cell revealed and its neighbours
-randSelect' :: Int -> Int -> Int -> [Int]
-randSelect' n numBombs firstCell = take numBombs . nub . filter (`notElem` safeCells) $ randomRs (0, n*n-1) $ mkStdGen nanosSinceEpoch
+randSelect :: Int -> Int -> Int -> Int -> [Int]
+randSelect n numBombs firstCell seed = take numBombs . nub . filter (`notElem` safeCells) $ randomRs (0, n*n-1) $ mkStdGen seed
     where 
         safeCells = firstCell : findNeighbours firstCell n
-        nanosSinceEpoch = floor . nominalDiffTimeToSeconds . utcTimeToPOSIXSeconds $ unsafePerformIO getCurrentTime
-        -- system time (converted to Int) used as seed for random number generator
-        -- unsafePerformIO used to avoid returning IO Int
+
+-- system time (converted to Int) used as seed for random number generator
+sysTime :: IO Int
+sysTime = do
+    time <- getCurrentTime
+    return $ floor . nominalDiffTimeToSeconds . utcTimeToPOSIXSeconds $ time
 
 
 -- place bombs at the given indices
@@ -127,8 +128,8 @@ findNeighbours index n = handleEdges [index - n-1, index - n, index - n+1, index
 -- get list of bomb positions, place the bombs and find the surrounding bomb count for empty cells
 -- grid is initialised after first cell is revealed
 -- index of first cell is passed to avoid placing a bomb there
-resetGrid :: Int -> Int -> Grid -> Grid
-resetGrid numBombs firstCell grid = countBombs $ placeBombs grid $ randSelect' (size grid) numBombs firstCell
+resetGrid :: Int -> Int -> Int -> Grid -> Grid
+resetGrid numBombs firstCell seed grid = countBombs $ placeBombs grid $ randSelect (size grid) numBombs firstCell seed
 
 emptyGrid :: Int -> [Element] -> Grid
 emptyGrid size squares = Grid size $ V.fromList $ map (blankCell) (zip squares [0..])
@@ -136,10 +137,13 @@ emptyGrid size squares = Grid size $ V.fromList $ map (blankCell) (zip squares [
 blankCell :: (Element, Int) -> Cell
 blankCell (e, i) = Cell i e Hidden (Empty 0)
 
+getCell :: Grid -> Int -> Cell
+getCell (Grid _ cells) index = cells V.! index
+
 
 -- recursive function to reveal all 0 cells
 -- keeps track of two lists - indexes of cells to reveal and indexes to be checked
--- if a cell contains 0, get the difference between its neighbours and the indexes to be revealed
+-- if a cell contains 0, get its neighbours that haven't already been checked
 -- add this to both lists, recurse until no more cells to check
 revealIndexes :: Grid -> Int -> [Int]
 revealIndexes grid index = revealIndexes' grid [index] [index]
