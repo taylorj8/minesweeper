@@ -19,6 +19,7 @@ data GameState
     = GameStart Int
     | Playing (Int, Int)
     | GameOver
+    | Win
     deriving Eq
 
 main :: IO ()
@@ -33,8 +34,8 @@ setup window = do
 
     title <- makeTitle
 
-    let size = 16
-    let numBombs = 40
+    let size = 6
+    let numBombs = 3
     stateRef <- liftIO $ newIORef $ GameStart numBombs
     bombCounter <- makeBombCounter numBombs
     squares <- replicateM (size*size) uiCell
@@ -72,22 +73,24 @@ onClick index gridRef stateRef = do
             liftIO $ writeIORef stateRef $ Playing (n*n - numBombs, numBombs)
             liftIO $ print $ n*n - numBombs
             seed <- liftIO sysTime
-            liftIO $ modifyIORef gridRef $ resetGrid numBombs index seed 
+            liftIO $ modifyIORef gridRef $ resetGrid numBombs index seed
             revealCells index gridRef stateRef
         Playing (t, _) -> do
             grid <- liftIO $ readIORef gridRef
             liftIO $ print t
             when (cellState (grid `getCell` index) == Hidden) $ revealCells index gridRef stateRef
-        GameOver -> return ()
+        _ -> return ()
 
 
 revealCells :: Int -> IORef Grid -> IORef GameState -> UI ()
 revealCells index gridRef stateRef = do
     grid <- liftIO $ readIORef gridRef
     let indexes = revealIndexes grid index
-    trackRemainingCells grid stateRef (length indexes)
+    liftIO $ print indexes
+    let (grid', cellsRevealed) = updateCells indexes grid
+    trackRemainingCells grid stateRef cellsRevealed
     mapM_ (revealCell grid stateRef) indexes
-    liftIO $ writeIORef gridRef $ updateCells indexes grid
+    liftIO $ writeIORef gridRef grid'
     return ()
 
 revealCell :: Grid -> IORef GameState -> Int -> UI Element
@@ -97,7 +100,7 @@ revealCell grid stateRef index = do
         Hidden -> do
             case typ of
                 Bomb -> do
-                    V.mapM_ revealBomb (cells grid)
+                    V.mapM_ (fillBomb False) (cells grid)
                     liftIO $ writeIORef stateRef GameOver
                     element square # set UI.style [("background-color", "red")]
                     element (fst $ top grid) # set UI.text "Game Over"
@@ -106,19 +109,23 @@ revealCell grid stateRef index = do
                     # set UI.text (show typ)
         _ -> return square
 
+        
 trackRemainingCells :: Grid -> IORef GameState -> Int -> UI ()
 trackRemainingCells grid stateRef num = do
     state <- liftIO $ readIORef stateRef
     let state' = trackRemainingCells' num state
-    when (state' == GameOver) $ do
+    when (state' == Win) $ do
+        V.mapM_ (fillBomb True) (cells grid)
         element (fst $ top grid) # set UI.text "You Win!"
+        element (snd $ top grid) # set UI.text "0"
         return ()
     liftIO $ writeIORef stateRef state'
         where
-            trackRemainingCells' num (Playing (t, c)) = case t-num of 
-                0 -> GameOver
+            trackRemainingCells' num (Playing (t, c)) = case t-num of
+                0 -> Win
                 _ -> Playing (t-num, c)
             trackRemainingCells' _ state = state
+
 
 flagCell :: Int -> IORef Grid -> IORef GameState -> UI ()
 flagCell index gridRef stateRef = do
@@ -176,10 +183,12 @@ textColor n = case n of
     _ -> "white"
 
 
-revealBomb :: Cell -> UI Element
-revealBomb (Cell _ square _ typ) = do
+fillBomb :: Bool -> Cell -> UI Element
+fillBomb won (Cell _ square _ typ) = do
     case typ of
-        Bomb -> element square
-            # set UI.style [("background-color", "white")]
-            # set UI.text "💣"
+        Bomb -> if won then element square
+                    # set UI.text "🚩" 
+                else element square
+                    # set UI.style [("background-color", "white")]
+                    # set UI.text "💣"
         _ -> return square

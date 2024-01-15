@@ -165,15 +165,18 @@ toggleFlagged index (Grid n c cells) = do
         Flagged -> Grid n c (cells V.// [(index, cell { cellState = Hidden })])
         Revealed -> Grid n c cells
 
-updateCells :: [Int] -> Grid -> Grid
+-- returns updated Grid along with number of cells revealed
+updateCells :: [Int] -> Grid -> (Grid, Int)
 updateCells indexes (Grid n c cells) = do
-    let cells' = map (update . getCell) indexes
-    Grid n c (cells V.// (zip indexes cells'))
-        where 
-            getCell i = cells V.! i
-            update cell = case cellState cell of
-                Hidden -> cell { cellState = Revealed }
-                _ -> cell
+    let updatedCells = map updateAndGetCount $ zip indexes (map getCell indexes)
+        cells' = map fst updatedCells
+        hiddenCount = sum (map snd updatedCells)
+    (Grid n c (cells V.// (zip indexes cells')), hiddenCount)
+    where 
+        getCell i = cells V.! i
+        updateAndGetCount (i, cell) = case cellState cell of
+            Hidden -> (cell { cellState = Revealed }, 1)
+            _ -> (cell, 0)
 
     
 -- reveals the cells at the given indices
