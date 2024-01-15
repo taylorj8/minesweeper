@@ -4,6 +4,22 @@ import qualified Graphics.UI.Threepenny as UI
 import Graphics.UI.Threepenny.Core
 import Data.List.Split (chunksOf)
 
+
+makeTitle :: UI Element
+makeTitle = UI.div
+        # set UI.text "Minesweeper"
+        # set UI.style [
+            ("width", "100%"),
+            ("height", "50px"),
+            ("line-height", "50px"),
+            ("text-align", "center"),
+            ("font-size", "20px"),
+            ("font-family", "sans-serif"),
+            ("font-weight", "bold"),
+            ("user-select", "none")
+        ]
+
+
 displayGrid :: [Element] -> Int -> UI Element
 displayGrid squares n = UI.div #+ [
         UI.grid (chunksOf n $ map element squares)

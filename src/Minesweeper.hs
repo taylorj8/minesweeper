@@ -49,7 +49,7 @@ instance Show CellType where
 -- a vector is used as accessing cells by index is needed frequently
 data Grid = Grid {
     size :: Int,
-    counter :: Element,
+    top :: (Element, Element),
     cells :: (V.Vector Cell)
 }
 
@@ -132,8 +132,8 @@ findNeighbours index n = handleEdges [index - n-1, index - n, index - n+1, index
 resetGrid :: Int -> Int -> Int -> Grid -> Grid
 resetGrid numBombs firstCell seed grid = countBombs $ placeBombs grid $ randSelect (size grid) numBombs firstCell seed
 
-emptyGrid :: Int -> Element -> [Element] -> Grid
-emptyGrid size counter squares = Grid size counter $ V.fromList $ map (blankCell) (zip squares [0..])
+emptyGrid :: Int -> (Element, Element) -> [Element] -> Grid
+emptyGrid size bar squares = Grid size bar $ V.fromList $ map (blankCell) (zip squares [0..])
 
 blankCell :: (Element, Int) -> Cell
 blankCell (e, i) = Cell i e Hidden (Empty 0)
