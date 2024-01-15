@@ -1,14 +1,11 @@
 module Minesweeper where
 
-{-# LANGUAGE BangPatterns #-}
-
+import Graphics.UI.Threepenny.Core (Element)
 import System.Random (mkStdGen, randomRs)
-import Data.List (nub, (\\), concatMap, union)
+import Data.List (nub, (\\))
 import Data.Time (getCurrentTime, nominalDiffTimeToSeconds)
 import Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
 import qualified Data.Vector as V
-
-import Graphics.UI.Threepenny.Core (Element)
 
 -- cell can either be a bomb or a number representing surrounding bombs
 -- also stores the index of the cell
@@ -163,11 +160,3 @@ updateCells indexes (Grid n c cells) = do
         updateAndGetCount (i, cell) = case cellState cell of
             Hidden -> (cell { cellState = Revealed }, 1)
             _ -> (cell, 0)
-
-    
--- reveals the cells at the given indices
--- revealCells :: [Int] -> Grid -> Grid
--- revealCells indexes (Grid n cells) = Grid n (map reveal cells)
---     where
---         reveal (i, r, Bomb) = if i `elem` indexes then bomb i True else bomb i r
---         reveal (i, r, (Empty n)) = if i `elem` indexes then empty i True n else empty i r n
