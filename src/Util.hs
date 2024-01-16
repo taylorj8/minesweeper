@@ -69,3 +69,10 @@ instance Show Grid where
         where
             rows = [take n $ drop (i*n) $ V.toList cells | i <- [0..n-1]]
             showRow = unwords . map show
+
+-- grid helper functions
+getCell :: Grid -> Int -> Cell
+getCell (Grid _ _ cells) index = cells V.! index
+
+squareSize :: Grid -> Int
+squareSize (Grid n _ _) = n*n

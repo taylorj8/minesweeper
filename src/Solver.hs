@@ -1,10 +1,69 @@
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# HLINT ignore "Use when" #-}
 module Solver where
 
 import Util
+import Minesweeper
 
 import qualified Graphics.UI.Threepenny as UI
 import Graphics.UI.Threepenny.Core
 import Data.IORef (IORef, newIORef, readIORef, writeIORef, modifyIORef)
+import qualified Data.Vector as V
 
-solve :: IORef Grid -> IORef GameState -> UI ()
-solve _ _ = return ()
+
+-- solve the grid
+solve :: IORef Grid -> IORef GameState -> IORef Int -> UI ()
+solve gridRef stateRef currentRef = do
+    gameState <- liftIO $ readIORef stateRef
+    grid <- liftIO $ readIORef gridRef
+    case gameState of
+        -- first move - click cell in middle
+        GameStart _ -> clickCell (middleIndex grid) gridRef stateRef
+        Playing _ -> solveFlags gridRef stateRef currentRef
+        _ -> return ()
+    return ()
+
+
+-- return the middle index of the grid
+-- top left middle in case of even grid
+middleIndex :: Grid -> Int
+middleIndex (Grid n _ _) = case n `mod` 2 of
+    1 -> (n * n) `div` 2
+    _ -> ((n * n) `div` 2) - (n `div` 2)
+
+
+solveFlags :: IORef Grid -> IORef GameState -> IORef Int -> UI ()
+solveFlags gridRef stateRef currentRef = do
+    current <- liftIO $ readIORef currentRef
+    grid <- liftIO $ readIORef gridRef
+    solveFlags' grid current 0
+    where 
+        solveFlags' grid cur iterations = do
+            -- mod keeps index inside grid
+            let current = cur `mod` squareSize grid
+            let cell = grid `getCell` current
+            -- if no move found after checking every cell, return
+            if iterations > squareSize grid then return ()
+            else case cell of 
+                -- if 0 cell or unrevealed, try next cell
+                (Cell _ _ Revealed (Empty 0)) -> solveFlags' grid (current+1) (iterations+1)
+                (Cell i _ Revealed (Empty n)) -> do
+                    -- get hidden cells and number of flagged cells
+                    let neighbours = getNeighbours grid i
+                    let hiddenCells = filter (\cell -> cellState cell == Hidden) neighbours
+                    let numFlagged = length $ filter (\cell -> cellState cell == Flagged) neighbours
+
+                    -- two basic rules (explained in report)
+                    -- if neither apply, try next cell
+                    if null hiddenCells then solveFlags' grid (current+1) (iterations+1)
+                    else if n - numFlagged == 0 then makeMove hiddenCells current clickCell 
+                    else if n - numFlagged == length hiddenCells then makeMove hiddenCells current flagCell 
+                    else solveFlags' grid (current+1) (iterations+1)
+
+                _ -> solveFlags' grid (current+1) (iterations+1)
+        -- make the supplied move and save the current cell index for next time solve button clicked
+        makeMove hiddenCells current move = do 
+            move (index $ head hiddenCells) gridRef stateRef
+            liftIO $ writeIORef currentRef current
+
+

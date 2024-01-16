@@ -45,14 +45,15 @@ uiCell = UI.div # set UI.style [
         ("border", "1px solid black"),
         ("font-size", "16px"),
         ("font-weight", "bold"),
-        ("vertical-align", "top")
+        ("vertical-align", "top"),
+        ("display", "inline-block")
     ] # setCommonAttributes
 
 makeSolveButton :: UI Element
 makeSolveButton = UI.div 
-    # set UI.text "Solve"
+    # set UI.text "Play Move"
     # set UI.style [
-        ("width", "75px"),
+        ("width", "100px"),
         ("height", "32px"),
         ("line-height", "32px"),
         ("border", "2px solid black"),
