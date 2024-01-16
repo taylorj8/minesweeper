@@ -49,8 +49,9 @@ setup window = do
     solveButton <- makeSolveButton "Play Move"
     autoButton <- makeSolveButton "Auto Play"
     solveRef <- liftIO $ newIORef 0
-    on UI.click solveButton $ \_ -> solve gridRef stateRef solveRef
-    on UI.click autoButton $ \_ -> autoSolve gridRef stateRef solveRef autoButton
+    testRef <- liftIO $ newIORef 0
+    on UI.click solveButton $ \_ -> solve gridRef stateRef solveRef testRef
+    on UI.click autoButton $ \_ -> autoSolve gridRef stateRef solveRef testRef autoButton
 
     let bottomRow = UI.row [element solveButton, element autoButton] # set UI.style [("margin", "auto")]
 

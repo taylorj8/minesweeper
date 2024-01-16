@@ -20,7 +20,7 @@ import qualified Graphics.UI.Threepenny as UI
 -- safeCells can't have bombs - first cell revealed and its neighbours
 -- ensures the grid always starts with the correct number of bombs
 randSelect :: Int -> Int -> Int -> Int -> [Int]
-randSelect n numBombs firstCell seed = take numBombs . nub . filter (`notElem` safeCells) $ randomRs (0, n*n-1) $ mkStdGen seed
+randSelect n numBombs firstCell seed = take numBombs . nub . filter (`notElem` safeCells) $ randomRs (0, n*n-1) $ mkStdGen 1
     where 
         safeCells = firstCell : findNeighbours firstCell n
 
