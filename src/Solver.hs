@@ -27,6 +27,7 @@ solve gridRef stateRef currentRef = do
         _ -> return False
 
 
+-- repeatedly call solve until no remaining moves
 autoSolve :: IORef Grid -> IORef GameState -> IORef Int -> Element -> UI ()
 autoSolve gridRef stateRef currentRef button = do
     element button # set UI.style [("background-color", "LightGoldenRodYellow")]
@@ -40,6 +41,7 @@ autoSolve gridRef stateRef currentRef button = do
             else do 
                 element button # set UI.style [("background-color", "lightgrey")]
                 return ()
+
 
 -- return the middle index of the grid
 -- top left middle in case of even grid
