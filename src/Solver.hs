@@ -14,17 +14,17 @@ import Control.Concurrent ( threadDelay )
 
 
 -- return true if a move was performed
-solve :: IORef Grid -> IORef GameState -> IORef Int -> IORef Int -> UI Bool
-solve gridRef stateRef currentRef testRef = do
+solve :: IORef Grid -> IORef GameState -> IORef Int -> IORef Int -> IORef Int -> UI Bool
+solve gridRef stateRef currentRef testRef seedRef = do
     gameState <- liftIO $ readIORef stateRef
     grid <- liftIO $ readIORef gridRef
     case gameState of
         -- first move - click cell in middle
         GameStart _ -> do 
-            clickCell (middleIndex grid) gridRef stateRef
+            clickCell (middleIndex grid) gridRef stateRef seedRef
             return True
         Playing _ -> do 
-            b <- basicSolve gridRef stateRef currentRef testRef
+            b <- basicSolve gridRef stateRef currentRef testRef seedRef
             total <- liftIO $ readIORef testRef
             liftIO $ print total
             return b
@@ -32,15 +32,15 @@ solve gridRef stateRef currentRef testRef = do
 
 
 -- repeatedly call solve until no remaining moves
-autoSolve :: IORef Grid -> IORef GameState -> IORef Int -> IORef Int -> Element -> UI ()
-autoSolve gridRef stateRef currentRef testRef button = do
+autoSolve :: IORef Grid -> IORef GameState -> IORef Int -> IORef Int -> IORef Int -> Element -> UI ()
+autoSolve gridRef stateRef currentRef testRef seedRef button = do
     element button # set UI.style [("background-color", "LightGoldenRodYellow")]
     autoSolve' gridRef stateRef currentRef
     where 
         autoSolve' gridRef stateRef currentRef = do
-            result <- solve gridRef stateRef currentRef testRef
+            result <- solve gridRef stateRef currentRef testRef seedRef
             if result then do 
-                liftIO $ threadDelay 100000
+                liftIO $ threadDelay 10000
                 autoSolve' gridRef stateRef currentRef
             else do 
                 element button # set UI.style [("background-color", "lightgrey")]
@@ -56,11 +56,11 @@ middleIndex (Grid n _ _) = case n `mod` 2 of
 
 
 -- returns true if move performed
-basicSolve :: IORef Grid -> IORef GameState -> IORef Int -> IORef Int -> UI Bool
-basicSolve gridRef stateRef currentRef testRef = do
+basicSolve :: IORef Grid -> IORef GameState -> IORef Int -> IORef Int -> IORef Int -> UI Bool
+basicSolve gridRef stateRef currentRef testRef seedRef = do
     current <- liftIO $ readIORef currentRef
     grid <- liftIO $ readIORef gridRef
-    solveFlags' grid current 0
+    solveFlags' grid 0 0
     where 
         solveFlags' grid cur iterations = do
             -- mod keeps index inside grid
@@ -82,13 +82,18 @@ basicSolve gridRef stateRef currentRef testRef = do
                     -- two basic rules (explained in report)
                     -- if neither apply, try next cell
                     if null hiddenCells then solveFlags' grid (current+1) (iterations+1)
-                    else if n - numFlagged == 0 then makeMove hiddenCells current clickCell iterations
-                    else if n - numFlagged == length hiddenCells then makeMove hiddenCells current flagCell iterations
+                    else if n - numFlagged == 0 then makeMove hiddenCells current clickCell iterations seedRef
+                    else if n - numFlagged == length hiddenCells then makeMove' hiddenCells current flagCell iterations
                     else solveFlags' grid (current+1) (iterations+1)
 
                 _ -> solveFlags' grid (current+1) (iterations+1)
         -- make the supplied move and save the current cell index for next time solve button clicked
-        makeMove hiddenCells current move iterations = do 
+        makeMove hiddenCells current move iterations seedRef = do 
+            move (index $ head hiddenCells) gridRef stateRef seedRef
+            liftIO $ writeIORef currentRef current
+            liftIO $ modifyIORef testRef (+ iterations)
+            return True
+        makeMove' hiddenCells current move iterations = do 
             move (index $ head hiddenCells) gridRef stateRef
             liftIO $ writeIORef currentRef current
             liftIO $ modifyIORef testRef (+ iterations)

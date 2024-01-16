@@ -38,20 +38,21 @@ setup window = do
 
     -- initialise state and set onclick functions for the cells
     stateRef <- liftIO $ newIORef $ GameStart numBombs
-    setOnClick gridRef stateRef
+    seedRef <- liftIO $ newIORef 0
+    setOnClick gridRef stateRef seedRef
 
+    testRef <- liftIO $ newIORef 0
     -- set up restart button and arrange in a row
     restartButton <- topCell "↺"
-    on UI.click restartButton $ \_ -> handleRestart gridRef stateRef numBombs
+    on UI.click restartButton $ \_ -> handleRestart gridRef stateRef numBombs testRef seedRef
     let topRow = UI.row [element bombCounter, element title, element restartButton] # set UI.style [("margin", "auto")]
 
     -- set up solve buttons
     solveButton <- makeSolveButton "Play Move"
     autoButton <- makeSolveButton "Auto Play"
     solveRef <- liftIO $ newIORef 0
-    testRef <- liftIO $ newIORef 0
-    on UI.click solveButton $ \_ -> solve gridRef stateRef solveRef testRef
-    on UI.click autoButton $ \_ -> autoSolve gridRef stateRef solveRef testRef autoButton
+    on UI.click solveButton $ \_ -> solve gridRef stateRef solveRef testRef seedRef
+    on UI.click autoButton $ \_ -> autoSolve gridRef stateRef solveRef testRef seedRef autoButton
 
     let bottomRow = UI.row [element solveButton, element autoButton] # set UI.style [("margin", "auto")]
 
@@ -67,11 +68,11 @@ setup window = do
 
 -- set up click handlers for each cell
 -- left click to reveal cell, right click to place flag
-setOnClick :: IORef Grid -> IORef GameState -> UI ()
-setOnClick gridRef stateRef = do
+setOnClick :: IORef Grid -> IORef GameState -> IORef Int -> UI ()
+setOnClick gridRef stateRef seedRef = do
     (Grid _ _ cells) <- liftIO $ readIORef gridRef
     mapM_ (clickHandlers gridRef) cells
         where
             clickHandlers gridRef (Cell i square state _) = do
-                on UI.click square $ \_ -> clickCell i gridRef stateRef
+                on UI.click square $ \_ -> clickCell i gridRef stateRef seedRef
                 on UI.contextmenu square $ \_ -> flagCell i gridRef stateRef

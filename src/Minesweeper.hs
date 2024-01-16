@@ -132,8 +132,8 @@ updateCells indexes (Grid n c cells) = do
 
 
 -- handles left click
-clickCell :: Int -> IORef Grid -> IORef GameState -> UI ()
-clickCell index gridRef stateRef = do
+clickCell :: Int -> IORef Grid -> IORef GameState -> IORef Int -> UI ()
+clickCell index gridRef stateRef seedRef = do
     gameState <- liftIO $ readIORef stateRef
     case gameState of
         -- when game not yet started
@@ -142,7 +142,8 @@ clickCell index gridRef stateRef = do
         GameStart numBombs -> do
             (Grid n _ _) <- liftIO $ readIORef gridRef
             liftIO $ writeIORef stateRef $ Playing (n*n - numBombs, numBombs)
-            seed <- liftIO sysTime
+            seed <- liftIO $ readIORef seedRef
+            liftIO $ print seed
             liftIO $ modifyIORef gridRef $ resetGrid numBombs index seed
             revealCells index gridRef stateRef
         -- when in game
@@ -244,9 +245,11 @@ flagCell index gridRef stateRef = do
 
 
 -- restarts the game
-handleRestart :: IORef Grid -> IORef GameState -> Int -> UI ()
-handleRestart gridRef stateRef numBombs = do
+handleRestart :: IORef Grid -> IORef GameState -> Int -> IORef Int -> IORef Int -> UI ()
+handleRestart gridRef stateRef numBombs testRef seedRef = do
+    liftIO $ modifyIORef seedRef (+1)
     Grid _ top cells <- liftIO $ readIORef gridRef
+    liftIO $ writeIORef testRef 0
     resetTopBar top  -- reset title and flag count
     liftIO $ writeIORef stateRef (GameStart numBombs)  -- update game state
     V.mapM_ resetSquare cells  -- reset UI
