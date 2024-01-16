@@ -19,7 +19,6 @@ makeTitle = UI.div
             ("user-select", "none")
         ]
 
-
 displayGrid :: [Element] -> Int -> UI Element
 displayGrid squares n = UI.div #+ [
         UI.grid (chunksOf n $ map element squares)
@@ -33,29 +32,44 @@ topCell text = UI.div
         ("width", "40px"),
         ("height", "40px"),
         ("line-height", "40px"),
-        ("background-color", "lightgrey"),
         ("border", "2px solid black"),
-        ("text-align", "center"),
         ("font-size", "22px"),
-        ("font-family", "sans-serif"),
-        ("font-weight", "bold"),
-        ("display", "inline-block"),
-        ("vertical-align", "center"),
-        ("user-select", "none")
-    ]
+        ("vertical-align", "center")
+    ] # setCommonAttributes
 
 uiCell :: UI Element
 uiCell = UI.div # set UI.style [
         ("width", "25px"),
         ("height", "25px"),
         ("line-height", "25px"),
-        ("background-color", "lightgrey"),
         ("border", "1px solid black"),
-        ("text-align", "center"),
         ("font-size", "16px"),
-        ("font-family", "sans-serif"),
         ("font-weight", "bold"),
-        ("display", "inline-block"),
+        ("vertical-align", "top")
+    ] # setCommonAttributes
+
+makeSolveButton :: UI Element
+makeSolveButton = UI.div 
+    # set UI.text "Solve"
+    # set UI.style [
+        ("width", "75px"),
+        ("height", "32px"),
+        ("line-height", "32px"),
+        ("border", "2px solid black"),
+        ("font-size", "18px"),
         ("vertical-align", "top"),
-        ("user-select", "none")
+        ("margin", "auto"),
+        ("margin-top", "8px")
+    ] # setCommonAttributes
+
+-- attributes common to multiple components
+setCommonAttributes :: UI Element -> UI Element
+setCommonAttributes = set UI.style [
+        ("text-align", "center"),
+        ("font-family", "sans-serif"),
+        ("user-select", "none"),
+        ("background-color", "lightgrey"),
+        ("text-align", "center"),
+        ("font-family", "sans-serif")
     ]
+    

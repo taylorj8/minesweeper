@@ -2,6 +2,8 @@ module Main where
 
 import Minesweeper
 import Components
+import Solver
+import Util
 
 import qualified Graphics.UI.Threepenny as UI
 import Graphics.UI.Threepenny.Core as C
@@ -9,18 +11,6 @@ import Graphics.UI.Threepenny.Core as C
 import qualified Data.Vector as V
 import Data.IORef (IORef, newIORef, readIORef, writeIORef, modifyIORef)
 import Control.Monad (replicateM, when)
-
-
--- tracks the state of the game
--- allows click behaviour to be changed based on state
--- GameStart state contains the number of bombs
--- Playing state contains number of hidden non-bomb cells and number of remaining flags
-data GameState
-    = GameStart Int
-    | Playing (Int, Int)
-    | GameOver
-    | Win
-    deriving Eq
 
 
 main :: IO ()
@@ -50,15 +40,20 @@ setup window = do
     stateRef <- liftIO $ newIORef $ GameStart numBombs
     setOnClick gridRef stateRef
 
-    -- set up last button and arrange in a row
+    -- set up restart button and arrange in a row
     restartButton <- topCell "↺"
     on UI.click restartButton $ \_ -> handleRestart gridRef stateRef numBombs
-    topBar <- UI.row [element bombCounter, element title, element restartButton]
+    let topBar = UI.row [element bombCounter, element title, element restartButton] # set UI.style [("margin", "auto")]
+
+    -- set up solve button
+    solveButton <- makeSolveButton 
+    on UI.click solveButton $ \_ -> solve gridRef stateRef
 
     getBody window #+
         [
-            UI.div #+ [element topBar # set UI.style [("margin", "auto")]],
-            displayGrid squares size
+            UI.div #+ [topBar],
+            displayGrid squares size,
+            UI.div #+ [element solveButton]
         ]
         
     return ()

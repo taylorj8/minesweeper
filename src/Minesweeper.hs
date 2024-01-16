@@ -1,66 +1,13 @@
 module Minesweeper where
 
+import Util
+
 import Graphics.UI.Threepenny.Core (Element)
 import System.Random (mkStdGen, randomRs)
 import Data.List (nub, (\\))
 import Data.Time (getCurrentTime, nominalDiffTimeToSeconds)
 import Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
 import qualified Data.Vector as V
-
--- cell can either be a bomb or a number representing surrounding bombs
-data CellType
-    = Bomb
-    | Empty Int
-    deriving Eq
-
--- cell can be hidden, revealed or flagged
-data CellState
-    = Hidden
-    | Revealed
-    | Flagged
-    deriving (Show, Eq)
-
--- all data cell needs
--- index, UI representation, state and type
-data Cell = Cell {
-    index :: Int,
-    square :: Element,
-    cellState :: CellState,
-    cellType :: CellType
-}
-
--- helper functions to create a Cell
-bomb :: Int -> Element -> CellState -> Cell
-bomb i e r = Cell i e r Bomb
-
-empty :: Int -> Element -> CellState -> Int -> Cell
-empty i e r n = Cell i e r (Empty n)
-
--- show B for bomb or number in empty cell
-instance Show Cell where
-    show (Cell _ _ _ typ) = show typ
-
-instance Show CellType where
-    show Bomb = "B"
-    show (Empty 0) = " "
-    show (Empty n) = show n
-
--- board represented as a vector of cells
--- size of rows, UI elements representing top bar, vector of cells
--- a vector is used as accessing cells by index is needed frequently
--- I chose a 1D representation rather than 2D - explanation in report
-data Grid = Grid {
-    size :: Int,
-    top :: (Element, Element),
-    cells :: (V.Vector Cell)
-}
-
--- show grid in 2D format
-instance Show Grid where
-    show (Grid n _ cells) = unlines $ map showRow rows
-        where
-            rows = [take n $ drop (i*n) $ V.toList cells | i <- [0..n-1]]
-            showRow = unwords . map show
 
 
 -- randomly select numBombs indexes from a list numbers [0..n*n]
