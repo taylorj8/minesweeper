@@ -9,20 +9,37 @@ import qualified Graphics.UI.Threepenny as UI
 import Graphics.UI.Threepenny.Core
 import Data.IORef (IORef, newIORef, readIORef, writeIORef, modifyIORef)
 import qualified Data.Vector as V
+import Control.Monad (forever)
+import Control.Concurrent ( threadDelay )
 
 
--- solve the grid
-solve :: IORef Grid -> IORef GameState -> IORef Int -> UI ()
+-- return true if a move was performed
+solve :: IORef Grid -> IORef GameState -> IORef Int -> UI Bool
 solve gridRef stateRef currentRef = do
     gameState <- liftIO $ readIORef stateRef
     grid <- liftIO $ readIORef gridRef
     case gameState of
         -- first move - click cell in middle
-        GameStart _ -> clickCell (middleIndex grid) gridRef stateRef
-        Playing _ -> solveFlags gridRef stateRef currentRef
-        _ -> return ()
-    return ()
+        GameStart _ -> do 
+            clickCell (middleIndex grid) gridRef stateRef
+            return True
+        Playing _ -> basicSolve gridRef stateRef currentRef
+        _ -> return False
 
+
+autoSolve :: IORef Grid -> IORef GameState -> IORef Int -> Element -> UI ()
+autoSolve gridRef stateRef currentRef button = do
+    element button # set UI.style [("background-color", "LightGoldenRodYellow")]
+    autoSolve' gridRef stateRef currentRef
+    where 
+        autoSolve' gridRef stateRef currentRef = do
+            result <- solve gridRef stateRef currentRef
+            if result then do 
+                liftIO $ threadDelay 100000
+                autoSolve' gridRef stateRef currentRef
+            else do 
+                element button # set UI.style [("background-color", "lightgrey")]
+                return ()
 
 -- return the middle index of the grid
 -- top left middle in case of even grid
@@ -32,8 +49,9 @@ middleIndex (Grid n _ _) = case n `mod` 2 of
     _ -> ((n * n) `div` 2) - (n `div` 2)
 
 
-solveFlags :: IORef Grid -> IORef GameState -> IORef Int -> UI ()
-solveFlags gridRef stateRef currentRef = do
+-- returns true if move performed
+basicSolve :: IORef Grid -> IORef GameState -> IORef Int -> UI Bool
+basicSolve gridRef stateRef currentRef = do
     current <- liftIO $ readIORef currentRef
     grid <- liftIO $ readIORef gridRef
     solveFlags' grid current 0
@@ -43,7 +61,7 @@ solveFlags gridRef stateRef currentRef = do
             let current = cur `mod` squareSize grid
             let cell = grid `getCell` current
             -- if no move found after checking every cell, return
-            if iterations > squareSize grid then return ()
+            if iterations > squareSize grid then return False
             else case cell of 
                 -- if 0 cell or unrevealed, try next cell
                 (Cell _ _ Revealed (Empty 0)) -> solveFlags' grid (current+1) (iterations+1)
@@ -65,5 +83,6 @@ solveFlags gridRef stateRef currentRef = do
         makeMove hiddenCells current move = do 
             move (index $ head hiddenCells) gridRef stateRef
             liftIO $ writeIORef currentRef current
+            return True
 
 

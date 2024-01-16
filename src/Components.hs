@@ -49,9 +49,9 @@ uiCell = UI.div # set UI.style [
         ("display", "inline-block")
     ] # setCommonAttributes
 
-makeSolveButton :: UI Element
-makeSolveButton = UI.div 
-    # set UI.text "Play Move"
+makeSolveButton :: String -> UI Element
+makeSolveButton text = UI.div 
+    # set UI.text text
     # set UI.style [
         ("width", "100px"),
         ("height", "32px"),
@@ -59,8 +59,7 @@ makeSolveButton = UI.div
         ("border", "2px solid black"),
         ("font-size", "18px"),
         ("vertical-align", "top"),
-        ("margin", "auto"),
-        ("margin-top", "8px")
+        ("margin", "8px 20px")
     ] # setCommonAttributes
 
 -- attributes common to multiple components

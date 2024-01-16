@@ -43,18 +43,22 @@ setup window = do
     -- set up restart button and arrange in a row
     restartButton <- topCell "↺"
     on UI.click restartButton $ \_ -> handleRestart gridRef stateRef numBombs
-    let topBar = UI.row [element bombCounter, element title, element restartButton] # set UI.style [("margin", "auto")]
+    let topRow = UI.row [element bombCounter, element title, element restartButton] # set UI.style [("margin", "auto")]
 
-    -- set up solve button
+    -- set up solve buttons
+    solveButton <- makeSolveButton "Play Move"
+    autoButton <- makeSolveButton "Auto Play"
     solveRef <- liftIO $ newIORef 0
-    solveButton <- makeSolveButton 
     on UI.click solveButton $ \_ -> solve gridRef stateRef solveRef
+    on UI.click autoButton $ \_ -> autoSolve gridRef stateRef solveRef autoButton
+
+    let bottomRow = UI.row [element solveButton, element autoButton] # set UI.style [("margin", "auto")]
 
     getBody window #+
         [
-            UI.div #+ [topBar],
+            UI.div #+ [topRow],
             displayGrid squares size,
-            UI.div #+ [element solveButton]
+            UI.div #+ [bottomRow]
         ]
         
     return ()
