@@ -82,10 +82,10 @@ squareSize :: Grid -> Int
 squareSize (Grid n _ _) = n*n
 
  -- either contains or unsafe options
- -- Certain has list of guaranteed safe cells and bombs
+ -- Certain has list of guaranteed bombs to flag
  -- Uncertain contains cell with lowest probability of a bomb
 data ProbabilityList
-    = Certain [Int] [Int]
-    | Uncertain (Int, Float)
+    = Certain [Int]
+    | Uncertain (Int, Rational)
     | None
     deriving Show

@@ -12,7 +12,6 @@ import qualified Data.Vector as V
 import Control.Monad (forever, unless)
 import Control.Concurrent ( threadDelay )
 import Data.List (subsequences, partition, nub, groupBy, sortBy, minimumBy)
-import Math.Combinatorics.Exact.Binomial (choose)
 import Data.Function (on)
 import Data.Ord (comparing)
 
@@ -35,7 +34,7 @@ solve gridRef stateRef currentRef probRef (button, probText) = do
                     if success then return True
                     else do
                         element button # set UI.style [("background-color", "LightGoldenRodYellow")]
-                        let (probList, tooLarge) = getProbablityList grid gameState
+                        (probList, tooLarge) <- getProbablityList grid gameState
                         liftIO $ print probList
                         liftIO $ writeIORef probRef probList
                         element button # set UI.style [("background-color", "lightgrey")]
@@ -115,15 +114,10 @@ probSolve :: IORef Grid -> IORef GameState -> IORef ProbabilityList -> Element -
 probSolve gridRef stateRef probRef probText = do
     probList <- liftIO $ readIORef probRef
     case probList of
-        Certain (safe : rest) [] -> do
-            clickCell safe gridRef stateRef probText
+        Certain (flag : rest) -> do
+            flagCell flag gridRef stateRef probText
             if null rest then liftIO $ writeIORef probRef None
-            else liftIO $ writeIORef probRef $ Certain rest []
-            return True
-        Certain safe (bomb : rest) -> do
-            flagCell bomb gridRef stateRef probText
-            if null safe && null rest then liftIO $ writeIORef probRef None
-            else liftIO $ writeIORef probRef $ Certain safe rest
+            else liftIO $ writeIORef probRef $ Certain rest
             return True
         Uncertain (safest, prob) -> do
             liftIO $ print (Uncertain (safest, prob))
@@ -133,22 +127,26 @@ probSolve gridRef stateRef probRef probText = do
         _ -> return False
 
 
-getProbablityList :: Grid -> GameState -> (ProbabilityList, Bool)
+getProbablityList :: Grid -> GameState -> UI (ProbabilityList, Bool)
 getProbablityList grid state = do
     case state of
         Playing (_, bombsRemaining) -> do
             let (frontierCells, frontierNeighbours, numOthers) = getFrontier grid
+            liftIO $ print $ length frontierCells
+            liftIO $ print $ length frontierNeighbours
             let (arrangements, tooLarge) = generateArrangements frontierCells (length frontierCells) bombsRemaining
+            liftIO $ print $ length arrangements
             let validArrangements = checkArrangements grid frontierNeighbours arrangements
-            let safeCells = getSafeCells validArrangements frontierCells
-            (toProbList safeCells $ calculateProbabilities validArrangements bombsRemaining numOthers, tooLarge)
-        _ -> (None, False)
+            liftIO $ print $ length validArrangements
+            temp <- calculateProbabilities validArrangements bombsRemaining numOthers
+            return (toProbList temp, tooLarge)
+        _ -> return (None, False)
 
-toProbList :: [Int] -> [(Int, Float)] -> ProbabilityList
-toProbList safe probs = do
+toProbList :: [(Int, Rational)] -> ProbabilityList
+toProbList probs = do
     let (bombs, uncertain) = partition ((==1.0) . snd) probs
-    if null safe && null bombs then Uncertain $ getSafest uncertain
-    else Certain safe (map fst bombs)
+    if null bombs then Uncertain $ getSafest uncertain
+    else Certain (map fst bombs)
     where
         getSafest list = minimumBy (comparing snd) list
 
@@ -167,51 +165,57 @@ getFrontier grid = do
             any (stateIs Revealed) neighbours
 
 
-getSafeCells :: [[Int]] -> [Int] -> [Int]
-getSafeCells arrangements = filter (\c -> all (notElem c) arrangements)
-
-
 stateIs :: CellState -> Cell -> Bool
 stateIs s c = cellState c == s
 
--- generateArrangements :: [Int] -> Int -> [[Int]]
--- generateArrangements indexes n = filter (\l -> length l <= n) $ subsequences indexes
-
+-- generate all possible arrangements
+-- if too many, stop at 10000000 - this may cause inaccurate predictions
 generateArrangements :: [Int] -> Int -> Int -> ([[Int]], Bool)
 generateArrangements indexes numCells numBombs = (take n $ subsequences indexes, tooLarge)
     where 
         m = sum $ map (choose numCells) [0..(min numBombs numCells)]
-        n = min m 10000000
-        tooLarge = m < 0 || m > 10000000
+        n = fromInteger $ min m 10000000
+        tooLarge = m > 10000000
 
--- return only valid arrangements
+
+-- take all possible arrangements and filter out invalid arrangements
 checkArrangements :: Grid -> [Cell] -> [[Int]] -> [[Int]]
 checkArrangements grid frontierNeighbours = filter isValidArrangement
     where
-        isValidArrangement :: [Int] -> Bool
         isValidArrangement arrangement = do
+            -- make grid with cells in arrangement flagged and check if valid
             let grid' = toggleFlagged arrangement grid
             all (isValid grid') frontierNeighbours
         isValid grid' cell = case cell of
             (Cell index _ _ (Empty n)) -> do
+                -- count the surrounding flags, valid if equal to number in cell
                 let surCells = getNeighbours grid' index
                 let numFlagged = length $ filter (stateIs Flagged) surCells
                 n == numFlagged
             _ -> False
-        isVal :: [Int] -> Bool
-        isVal arrangement = length arrangement == 3
 
 
-calculateProbabilities :: [[Int]] -> Int -> Int -> [(Int, Float)]
+calculateProbabilities :: [[Int]] -> Int -> Int -> UI [(Int, Rational)]
 calculateProbabilities arrangements remainingBombs numOthers = do
     let counts = map (ch . length) arrangements
+    liftIO $ print $ map length arrangements
+    liftIO $ print counts
     let totalArrangements = sum counts
     let weightedCounts = weightedCount arrangements counts
-    map (\(i, prob) -> (i, fromIntegral prob / fromIntegral totalArrangements)) weightedCounts
+    return $ map (\(i, prob) -> (i, fromIntegral prob / fromIntegral totalArrangements)) weightedCounts
     where
         ch bombsPlaced = numOthers `choose` (remainingBombs - bombsPlaced)
-        weightedCount :: [[Int]] -> [Int] -> [(Int, Int)]
+        weightedCount :: [[Int]] -> [Integer] -> [(Int, Integer)]
         weightedCount arrangements counts = do
             let weightedArrangements = concatMap (\(arr, count) -> zip arr (repeat count)) $ zip arrangements counts
             let groupedArrangements = groupBy ((==) `on` fst) $ sortBy (compare `on` fst) weightedArrangements
             map (\group -> (fst (head group), sum (map snd group))) groupedArrangements
+
+
+-- nCk - first convert to Integer to avoid overflow
+choose :: Int -> Int -> Integer
+choose n k = choose' (toInteger n) (toInteger k)
+    where
+        choose' n 0 = 1
+        choose' 0 k = 0
+        choose' n k = choose' (n-1) (k-1) * n `div` k
