@@ -9,15 +9,16 @@ import qualified Graphics.UI.Threepenny as UI
 import Graphics.UI.Threepenny.Core hiding (on)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef, modifyIORef)
 import qualified Data.Vector as V
-import Control.Monad (forever)
+import Control.Monad (forever, unless)
 import Control.Concurrent ( threadDelay )
-import Data.List (subsequences, partition, nub, groupBy, sortBy)
+import Data.List (subsequences, partition, nub, groupBy, sortBy, minimumBy)
 import Math.Combinatorics.Exact.Binomial (choose)
 import Data.Function (on)
+import Data.Ord (comparing)
 
 -- return true if a move was performed
-solve :: IORef Grid -> IORef GameState -> IORef Int -> UI Bool
-solve gridRef stateRef currentRef = do
+solve :: IORef Grid -> IORef GameState -> IORef Int -> IORef ProbabilityList -> UI Bool
+solve gridRef stateRef currentRef probRef = do
     gameState <- liftIO $ readIORef stateRef
     grid <- liftIO $ readIORef gridRef
     case gameState of
@@ -25,26 +26,32 @@ solve gridRef stateRef currentRef = do
         GameStart _ -> do
             clickCell (middleIndex grid) gridRef stateRef
             return True
-        Playing _ -> basicSolve gridRef stateRef currentRef
+        Playing _ -> do
+            probs <- liftIO $ readIORef probRef
+            case probs of
+                None -> do
+                    success <- basicSolve gridRef stateRef currentRef
+                    unless success $ do
+                        liftIO $ writeIORef probRef $ getProbablityList grid gameState
+                        probSolve gridRef stateRef probRef
+                        return ()
+                    return success
+                _ -> probSolve gridRef stateRef probRef
         _ -> return False
 
 
 -- repeatedly call solve until no remaining moves
-autoSolve :: IORef Grid -> IORef GameState -> IORef Int -> Element -> UI ()
-autoSolve gridRef stateRef currentRef button = do
+autoSolve :: IORef Grid -> IORef GameState -> IORef Int -> IORef ProbabilityList -> Element -> UI ()
+autoSolve gridRef stateRef currentRef probRef button = do
     element button # set UI.style [("background-color", "LightGoldenRodYellow")]
-    autoSolve' gridRef stateRef currentRef
+    autoSolve' gridRef stateRef currentRef probRef
     where
-        autoSolve' gridRef stateRef currentRef = do
-            continue <- solve gridRef stateRef currentRef
+        autoSolve' gridRef stateRef currentRef probRef = do
+            continue <- solve gridRef stateRef currentRef probRef
             if continue then
-                autoSolve' gridRef stateRef currentRef
+                autoSolve' gridRef stateRef currentRef probRef
             else do
                 element button # set UI.style [("background-color", "lightgrey")]
-                grid <- liftIO $ readIORef gridRef
-                state <- liftIO $ readIORef stateRef
-                let prob = probSolve grid state
-                liftIO $ print prob
                 return ()
 
 
@@ -93,16 +100,45 @@ basicSolve gridRef stateRef currentRef = do
             return True
 
 
-probSolve :: Grid -> GameState -> [(Int, Float)]
-probSolve grid state = do
+probSolve :: IORef Grid -> IORef GameState -> IORef ProbabilityList -> UI Bool
+probSolve gridRef stateRef probRef = do
+    probList <- liftIO $ readIORef probRef
+    case probList of
+        Certain (safe : rest) [] -> do
+            clickCell safe gridRef stateRef
+            if null rest then liftIO $ writeIORef probRef None
+            else liftIO $ writeIORef probRef $ Certain rest []
+            return True
+        Certain safe (bomb : rest) -> do
+            flagCell bomb gridRef stateRef
+            liftIO $ writeIORef probRef $ Certain safe rest
+            return True
+        Uncertain safest -> do
+            clickCell safest gridRef stateRef
+            liftIO $ writeIORef probRef None
+            return True
+        _ -> return False
+
+
+getProbablityList :: Grid -> GameState -> ProbabilityList
+getProbablityList grid state = do
     case state of
         Playing (_, bombsRemaining) -> do
             let (frontierCells, frontierNeighbours, numOthers) = getFrontier grid
             let arrangements = generateArrangements frontierCells bombsRemaining
             let validArrangements = checkArrangements grid frontierNeighbours arrangements
             let safeCells = getSafeCells validArrangements frontierCells
-            calculateProbabilities validArrangements bombsRemaining numOthers
-        _ -> []
+            toProbList $ calculateProbabilities validArrangements bombsRemaining numOthers
+        _ -> None
+    where
+        toProbList probs = do
+            let (safe, rest) = partition ((==0.0) . snd) probs
+            let (bombs, uncertain) = partition ((==1.0) . snd) rest
+            if null safe && null bombs then Uncertain $ getSafest uncertain
+            else Certain (map fst safe) (map fst bombs)
+        getSafest list = fst (minimumBy (comparing snd) list)
+
+-- [(Int, Float)]
 
 -- get indices of frontier cells along with number of other hidden cells
 -- i.e. hidden cells with a revealed neigbhour

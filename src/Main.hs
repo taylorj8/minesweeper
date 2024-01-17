@@ -36,6 +36,8 @@ setup window = do
     squares <- replicateM (size*size) uiCell
     gridRef <- liftIO $ newIORef $ emptyGrid size (title, bombCounter) squares
 
+    probRef <- liftIO $ newIORef None
+
     -- initialise state and set onclick functions for the cells
     stateRef <- liftIO $ newIORef $ GameStart numBombs
     setOnClick gridRef stateRef
@@ -49,8 +51,8 @@ setup window = do
     solveButton <- makeSolveButton "Play Move"
     autoButton <- makeSolveButton "Auto Play"
     solveRef <- liftIO $ newIORef 0
-    on UI.click solveButton $ \_ -> solve gridRef stateRef solveRef
-    on UI.click autoButton $ \_ -> autoSolve gridRef stateRef solveRef autoButton
+    on UI.click solveButton $ \_ -> solve gridRef stateRef solveRef probRef
+    on UI.click autoButton $ \_ -> autoSolve gridRef stateRef solveRef probRef autoButton
 
     let bottomRow = UI.row [element solveButton, element autoButton] # set UI.style [("margin", "auto")]
 
