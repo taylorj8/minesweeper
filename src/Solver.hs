@@ -131,30 +131,29 @@ getProbablityList grid state = do
     case state of
         Playing (_, bombsRemaining) -> do
             let (frontierCells, frontierNeighbours, numOthers) = getFrontier grid
-            let subsets = connectedSubsequences frontierCells (size grid)
-            handleArrangements grid state frontierNeighbours numOthers (length frontierCells) bombsRemaining subsets
+            -- let subsets = connectedSubsequences frontierCells (size grid)
+            let clusters = sortOn length (frontierCells : groupCells (size grid) frontierCells)
+            liftIO $ print $ "Clusters: " ++ show (length clusters)
+            handleArrangements frontierNeighbours numOthers (length frontierCells) bombsRemaining clusters
         _ -> return (None, False)
-
--- didn't work
--- try just separating on connected segments
-handleArrangements :: Grid -> GameState -> [Cell] -> Int -> Int -> Int -> [[Int]] -> UI (ProbabilityList, Bool)
-handleArrangements _ _ _ _ _ _ [] = return (None, False)
-handleArrangements grid state frontierNeighbours numOthers l bombsRemaining (frontierCells : rest) = do
-    liftIO $ print $ "Cells: " ++ show frontierCells
-    liftIO $ print $ "Cell Count: " ++ show (length frontierCells)
-    let (arrangements, tooLarge) = generateArrangements frontierCells (length frontierCells) bombsRemaining
-    liftIO $ print $ "Arrangements: " ++ show (length arrangements)
-    validArrangements <- checkArrangements grid frontierNeighbours arrangements
-    liftIO $ print $ "Valid Arrangements: " ++ show (length validArrangements)
-    temp <- calculateProbabilities validArrangements bombsRemaining (numOthers + (l - length frontierCells))
-    let probList = toProbList temp
-    liftIO $ print probList
-    liftIO $ print ""
-    case probList of
-        Certain x -> return (Certain x, True)
-        Uncertain x -> if null rest then return (Uncertain x, True)
-            else handleArrangements grid state frontierNeighbours numOthers l bombsRemaining rest
-        None -> handleArrangements grid state frontierNeighbours numOthers l bombsRemaining rest
+    where
+        handleArrangements _ _ _ _ [] = return (None, False)
+        handleArrangements frontierNeighbours numOthers l bombsRemaining (frontierCells : rest) = do
+            liftIO $ print $ "Cells: " ++ show frontierCells
+            liftIO $ print $ "Cell Count: " ++ show (length frontierCells)
+            let (arrangements, tooLarge) = generateArrangements frontierCells (length frontierCells) bombsRemaining
+            liftIO $ print $ "Arrangements: " ++ show (length arrangements)
+            validArrangements <- checkArrangements grid frontierNeighbours arrangements
+            liftIO $ print $ "Valid Arrangements: " ++ show (length validArrangements)
+            temp <- calculateProbabilities validArrangements bombsRemaining (numOthers + (l - length frontierCells))
+            let probList = toProbList temp
+            liftIO $ print probList
+            liftIO $ print $ id ""
+            case probList of
+                Certain x -> return (Certain x, True)
+                Uncertain x -> if null rest then return (Uncertain x, True)
+                    else handleArrangements frontierNeighbours numOthers l bombsRemaining rest
+                None -> handleArrangements frontierNeighbours numOthers l bombsRemaining rest
 
 
 -- group neigbouring cells
