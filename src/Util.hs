@@ -44,9 +44,13 @@ bomb i e r = Cell i e r Bomb
 empty :: Int -> Element -> CellState -> Int -> Cell
 empty i e r n = Cell i e r (Empty n)
 
+-- cells are equal if their indexes are equal
+instance Eq Cell where
+    c1 == c2 = index c1 == index c2
+
 -- show B for bomb or number in empty cell
 instance Show Cell where
-    show (Cell _ _ _ typ) = show typ
+    show (Cell index _ state typ) = show index
 
 instance Show CellType where
     show Bomb = "B"
