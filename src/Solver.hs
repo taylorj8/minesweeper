@@ -14,11 +14,12 @@ import Control.Concurrent ( threadDelay )
 import Data.List (subsequences, partition, nub, groupBy, sortBy, minimumBy)
 import Data.Function (on)
 import Data.Ord (comparing)
+import Data.Ratio ((%))
 
 
 -- return true if a move was performed
-solve :: IORef Grid -> IORef GameState -> IORef Int -> IORef ProbabilityList -> (Element, Element) -> UI Bool
-solve gridRef stateRef currentRef probRef (button, probText) = do
+solve :: IORef Grid -> IORef GameState -> IORef Int -> IORef ProbabilityList -> Element -> UI Bool
+solve gridRef stateRef currentRef probRef probText = do
     gameState <- liftIO $ readIORef stateRef
     grid <- liftIO $ readIORef gridRef
     case gameState of
@@ -33,14 +34,13 @@ solve gridRef stateRef currentRef probRef (button, probText) = do
                     success <- basicSolve gridRef stateRef currentRef probText
                     if success then return True
                     else do
-                        element button # set UI.style [("background-color", "LightGoldenRodYellow")]
+                        element probText # set UI.text "Calculating"
                         (probList, tooLarge) <- getProbablityList grid gameState
-                        liftIO $ print probList
                         liftIO $ writeIORef probRef probList
-                        element button # set UI.style [("background-color", "lightgrey")]
+                        element probText # set UI.text ""
                         case (probList, tooLarge) of
                             (_, True) -> do
-                                element probText # set UI.text "uncertain"
+                                element probText # set UI.text "Uncertain"
                                 return False
                             (Uncertain (_, prob), False) -> do
                                 element probText # set UI.text (show (round (prob*100)) ++ "%")
@@ -51,13 +51,13 @@ solve gridRef stateRef currentRef probRef (button, probText) = do
 
 
 -- repeatedly call solve until no remaining moves
-autoSolve :: IORef Grid -> IORef GameState -> IORef Int -> IORef ProbabilityList -> (Element, Element, Element) -> UI ()
-autoSolve gridRef stateRef currentRef probRef (solveButton, probText, autoButton) = do
+autoSolve :: IORef Grid -> IORef GameState -> IORef Int -> IORef ProbabilityList -> (Element, Element) -> UI ()
+autoSolve gridRef stateRef currentRef probRef (probText, autoButton) = do
     element autoButton # set UI.style [("background-color", "LightGoldenRodYellow")]
     autoSolve' gridRef stateRef currentRef probRef
     where
         autoSolve' gridRef stateRef currentRef probRef = do
-            continue <- solve gridRef stateRef currentRef probRef (solveButton, probText)
+            continue <- solve gridRef stateRef currentRef probRef probText
             if continue then
                 autoSolve' gridRef stateRef currentRef probRef
             else do
@@ -120,7 +120,6 @@ probSolve gridRef stateRef probRef probText = do
             else liftIO $ writeIORef probRef $ Certain rest
             return True
         Uncertain (safest, prob) -> do
-            liftIO $ print (Uncertain (safest, prob))
             clickCell safest gridRef stateRef probText
             liftIO $ writeIORef probRef None
             return False
@@ -132,23 +131,26 @@ getProbablityList grid state = do
     case state of
         Playing (_, bombsRemaining) -> do
             let (frontierCells, frontierNeighbours, numOthers) = getFrontier grid
-            liftIO $ print $ length frontierCells
-            liftIO $ print $ length frontierNeighbours
             let (arrangements, tooLarge) = generateArrangements frontierCells (length frontierCells) bombsRemaining
+            liftIO $ print tooLarge
             liftIO $ print $ length arrangements
-            let validArrangements = checkArrangements grid frontierNeighbours arrangements
+            validArrangements <- checkArrangements grid frontierNeighbours arrangements
             liftIO $ print $ length validArrangements
             temp <- calculateProbabilities validArrangements bombsRemaining numOthers
+            liftIO $ print temp
+            liftIO $ print $ toProbList temp
             return (toProbList temp, tooLarge)
         _ -> return (None, False)
 
 toProbList :: [(Int, Rational)] -> ProbabilityList
 toProbList probs = do
-    let (bombs, uncertain) = partition ((==1.0) . snd) probs
-    if null bombs then Uncertain $ getSafest uncertain
-    else Certain (map fst bombs)
+    case partition ((==1.0) . snd) probs of 
+        ([], []) -> None
+        ([], uncertain) -> Uncertain $ getSafest uncertain
+        (bombs, _) -> Certain (map fst bombs)
     where
         getSafest list = minimumBy (comparing snd) list
+
 
 -- get indices of frontier cells along with number of other hidden cells
 -- i.e. hidden cells with a revealed neigbhour
@@ -165,13 +167,26 @@ getFrontier grid = do
             any (stateIs Revealed) neighbours
 
 
+-- sortFrontierCells :: Int -> [Int] -> [Int]
+-- sortFrontierCells _ [] = []
+-- sortFrontierCells _ [x] = [x]
+-- sortFrontierCells n cells = sortedCells
+--     where
+--         neighbors = map (\x -> (x, filter (areNeighbours x) cells)) cells
+--         sortedNeighbors = sortBy (comparing snd) neighbors
+--         sortedCells = map fst sortedNeighbors
+--         areNeighbours x y = abs (x - y) == 1 || abs (x - y) == n
+
+
 stateIs :: CellState -> Cell -> Bool
 stateIs s c = cellState c == s
 
+
 -- generate all possible arrangements
--- if too many, stop at 10000000 - this may cause inaccurate predictions
+-- if too many, stop at 10,000,000 - this may cause inaccurate predictions
+-- first arrangement can be dropped as it's always the empty list
 generateArrangements :: [Int] -> Int -> Int -> ([[Int]], Bool)
-generateArrangements indexes numCells numBombs = (take n $ subsequences indexes, tooLarge)
+generateArrangements indexes numCells numBombs = (take n $ drop 1 $ subsequences indexes, tooLarge)
     where 
         m = sum $ map (choose numCells) [0..(min numBombs numCells)]
         n = fromInteger $ min m 10000000
@@ -179,8 +194,10 @@ generateArrangements indexes numCells numBombs = (take n $ subsequences indexes,
 
 
 -- take all possible arrangements and filter out invalid arrangements
-checkArrangements :: Grid -> [Cell] -> [[Int]] -> [[Int]]
-checkArrangements grid frontierNeighbours = filter isValidArrangement
+checkArrangements :: Grid -> [Cell] -> [[Int]] -> UI [[Int]]
+checkArrangements grid frontierNeighbours arr = do
+    liftIO $ print frontierNeighbours
+    return $ filter isValidArrangement arr
     where
         isValidArrangement arrangement = do
             -- make grid with cells in arrangement flagged and check if valid
@@ -198,11 +215,9 @@ checkArrangements grid frontierNeighbours = filter isValidArrangement
 calculateProbabilities :: [[Int]] -> Int -> Int -> UI [(Int, Rational)]
 calculateProbabilities arrangements remainingBombs numOthers = do
     let counts = map (ch . length) arrangements
-    liftIO $ print $ map length arrangements
-    liftIO $ print counts
     let totalArrangements = sum counts
     let weightedCounts = weightedCount arrangements counts
-    return $ map (\(i, prob) -> (i, fromIntegral prob / fromIntegral totalArrangements)) weightedCounts
+    return $ map (\(i, prob) -> (i, prob % totalArrangements)) weightedCounts
     where
         ch bombsPlaced = numOthers `choose` (remainingBombs - bombsPlaced)
         weightedCount :: [[Int]] -> [Integer] -> [(Int, Integer)]

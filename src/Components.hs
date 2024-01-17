@@ -65,7 +65,7 @@ makeSolveButton text = UI.div
 makeProbText :: UI Element
 makeProbText = UI.div
         # set UI.style [
-            ("width", "100px"),
+            ("width", "120px"),
             ("height", "32px"),
             ("text-align", "center"),
             ("font-size", "18px"),
