@@ -31,12 +31,17 @@ solve gridRef stateRef currentRef probRef = do
             case probs of
                 None -> do
                     success <- basicSolve gridRef stateRef currentRef
-                    unless success $ do
-                        liftIO $ writeIORef probRef $ getProbablityList grid gameState
-                        probSolve gridRef stateRef probRef
-                        return ()
-                    return success
-                _ -> probSolve gridRef stateRef probRef
+                    if success then return True
+                    else do
+                        let probList = toProbList $ getProbablityList grid gameState
+                        liftIO $ writeIORef probRef probList
+                        case probList of
+                            Uncertain _ -> return False
+                            _ -> probSolve gridRef stateRef probRef
+                        
+                _ -> do 
+                    liftIO $ print probs
+                    probSolve gridRef stateRef probRef
         _ -> return False
 
 
@@ -111,16 +116,18 @@ probSolve gridRef stateRef probRef = do
             return True
         Certain safe (bomb : rest) -> do
             flagCell bomb gridRef stateRef
-            liftIO $ writeIORef probRef $ Certain safe rest
+            if null safe && null rest then liftIO $ writeIORef probRef None
+            else liftIO $ writeIORef probRef $ Certain safe rest
             return True
-        Uncertain safest -> do
+        Uncertain (safest, prob) -> do
+            liftIO $ print (Uncertain (safest, prob))
             clickCell safest gridRef stateRef
             liftIO $ writeIORef probRef None
-            return True
+            return False
         _ -> return False
 
 
-getProbablityList :: Grid -> GameState -> ProbabilityList
+getProbablityList :: Grid -> GameState -> [(Int, Float)]
 getProbablityList grid state = do
     case state of
         Playing (_, bombsRemaining) -> do
@@ -128,17 +135,17 @@ getProbablityList grid state = do
             let arrangements = generateArrangements frontierCells bombsRemaining
             let validArrangements = checkArrangements grid frontierNeighbours arrangements
             let safeCells = getSafeCells validArrangements frontierCells
-            toProbList $ calculateProbabilities validArrangements bombsRemaining numOthers
-        _ -> None
-    where
-        toProbList probs = do
-            let (safe, rest) = partition ((==0.0) . snd) probs
-            let (bombs, uncertain) = partition ((==1.0) . snd) rest
-            if null safe && null bombs then Uncertain $ getSafest uncertain
-            else Certain (map fst safe) (map fst bombs)
-        getSafest list = fst (minimumBy (comparing snd) list)
+            calculateProbabilities validArrangements bombsRemaining numOthers
+        _ -> []
 
--- [(Int, Float)]
+toProbList :: [(Int, Float)] -> ProbabilityList
+toProbList probs = do
+    let (safe, rest) = partition ((==0.0) . snd) probs
+    let (bombs, uncertain) = partition ((==1.0) . snd) rest
+    if null safe && null bombs then Uncertain $ getSafest uncertain
+    else Certain (map fst safe) (map fst bombs)
+    where
+        getSafest list = minimumBy (comparing snd) list
 
 -- get indices of frontier cells along with number of other hidden cells
 -- i.e. hidden cells with a revealed neigbhour

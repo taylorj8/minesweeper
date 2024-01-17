@@ -86,5 +86,11 @@ squareSize (Grid n _ _) = n*n
  -- Uncertain contains cell with lowest probability of a bomb
 data ProbabilityList
     = Certain [Int] [Int]
-    | Uncertain Int
+    | Uncertain (Int, Float)
     | None
+    deriving Show
+
+-- instance Show ProbabilityList where
+--     show (Certain safe unsafe) = show (safe, unsafe)
+--     show (Uncertain cell) = show cell
+--     show None = "None"

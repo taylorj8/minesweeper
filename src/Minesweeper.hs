@@ -257,13 +257,16 @@ flagCell index gridRef stateRef = do
 
 
 -- restarts the game
-handleRestart :: IORef Grid -> IORef GameState -> Int -> UI ()
-handleRestart gridRef stateRef numBombs = do
+handleRestart :: IORef Grid -> IORef GameState -> IORef Int -> IORef ProbabilityList -> Int -> UI ()
+handleRestart gridRef stateRef solveRef probRef numBombs = do
     Grid _ top cells <- liftIO $ readIORef gridRef
     resetTopBar top  -- reset title and flag count
-    liftIO $ writeIORef stateRef (GameStart numBombs)  -- update game state
     V.mapM_ resetSquare cells  -- reset UI
-    liftIO $ modifyIORef gridRef $ \grid -> grid { cells = V.map resetCell cells }  -- reset internal cells
+    -- reset IORefs
+    liftIO $ writeIORef stateRef (GameStart numBombs) 
+    liftIO $ modifyIORef gridRef $ \grid -> grid { cells = V.map resetCell cells }
+    liftIO $ writeIORef solveRef 0
+    liftIO $ writeIORef probRef None
         where
             -- set cell as hidden and empty
             resetCell (Cell index square _ _) = Cell index square Hidden (Empty 0)

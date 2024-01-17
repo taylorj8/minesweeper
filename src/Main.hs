@@ -36,21 +36,22 @@ setup window = do
     squares <- replicateM (size*size) uiCell
     gridRef <- liftIO $ newIORef $ emptyGrid size (title, bombCounter) squares
 
-    probRef <- liftIO $ newIORef None
-
     -- initialise state and set onclick functions for the cells
     stateRef <- liftIO $ newIORef $ GameStart numBombs
     setOnClick gridRef stateRef
 
+    -- set up refs for solver
+    probRef <- liftIO $ newIORef None
+    solveRef <- liftIO $ newIORef 0
+
     -- set up restart button and arrange in a row
     restartButton <- topCell "↺"
-    on UI.click restartButton $ \_ -> handleRestart gridRef stateRef numBombs
+    on UI.click restartButton $ \_ -> handleRestart gridRef stateRef solveRef probRef numBombs
     let topRow = UI.row [element bombCounter, element title, element restartButton] # set UI.style [("margin", "auto")]
 
     -- set up solve buttons
     solveButton <- makeSolveButton "Play Move"
     autoButton <- makeSolveButton "Auto Play"
-    solveRef <- liftIO $ newIORef 0
     on UI.click solveButton $ \_ -> solve gridRef stateRef solveRef probRef
     on UI.click autoButton $ \_ -> autoSolve gridRef stateRef solveRef probRef autoButton
 
