@@ -59,8 +59,19 @@ makeSolveButton text = UI.div
         ("border", "2px solid black"),
         ("font-size", "18px"),
         ("vertical-align", "top"),
-        ("margin", "8px 20px")
+        ("margin-top", "8px")
     ] # setCommonAttributes
+
+makeProbText :: UI Element
+makeProbText = UI.div
+        # set UI.style [
+            ("width", "100px"),
+            ("height", "32px"),
+            ("text-align", "center"),
+            ("font-size", "18px"),
+            ("font-family", "sans-serif"),
+            ("user-select", "none")
+        ]
 
 -- attributes common to multiple components
 setCommonAttributes :: UI Element -> UI Element

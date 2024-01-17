@@ -145,8 +145,9 @@ updateCells indexes (Grid n c cells) = do
 
 
 -- handles left click
-clickCell :: Int -> IORef Grid -> IORef GameState -> UI ()
-clickCell index gridRef stateRef = do
+clickCell :: Int -> IORef Grid -> IORef GameState -> Element -> UI ()
+clickCell index gridRef stateRef probText = do
+    element probText # set UI.text ""
     gameState <- liftIO $ readIORef stateRef
     case gameState of
         -- when game not yet started
@@ -227,8 +228,9 @@ trackRemainingCells grid stateRef num = do
 
 
 -- handles right click
-flagCell :: Int -> IORef Grid -> IORef GameState -> UI ()
-flagCell index gridRef stateRef = do
+flagCell :: Int -> IORef Grid -> IORef GameState -> Element -> UI ()
+flagCell index gridRef stateRef probText = do
+    element probText # set UI.text ""
     gameState <- liftIO $ readIORef stateRef
     case gameState of
         -- change should only happen when in game
@@ -257,12 +259,13 @@ flagCell index gridRef stateRef = do
 
 
 -- restarts the game
-handleRestart :: IORef Grid -> IORef GameState -> IORef Int -> IORef ProbabilityList -> Int -> UI ()
-handleRestart gridRef stateRef solveRef probRef numBombs = do
+handleRestart :: IORef Grid -> IORef GameState -> IORef Int -> IORef ProbabilityList -> Element -> Int -> UI ()
+handleRestart gridRef stateRef solveRef probRef probText numBombs = do
     Grid _ top cells <- liftIO $ readIORef gridRef
     resetTopBar top  -- reset title and flag count
     V.mapM_ resetSquare cells  -- reset UI
     -- reset IORefs
+    element probText # set UI.text ""
     liftIO $ writeIORef stateRef (GameStart numBombs) 
     liftIO $ modifyIORef gridRef $ \grid -> grid { cells = V.map resetCell cells }
     liftIO $ writeIORef solveRef 0

@@ -37,8 +37,9 @@ setup window = do
     gridRef <- liftIO $ newIORef $ emptyGrid size (title, bombCounter) squares
 
     -- initialise state and set onclick functions for the cells
+    probText <- makeProbText
     stateRef <- liftIO $ newIORef $ GameStart numBombs
-    setOnClick gridRef stateRef
+    setOnClick gridRef stateRef probText
 
     -- set up refs for solver
     probRef <- liftIO $ newIORef None
@@ -46,16 +47,16 @@ setup window = do
 
     -- set up restart button and arrange in a row
     restartButton <- topCell "↺"
-    on UI.click restartButton $ \_ -> handleRestart gridRef stateRef solveRef probRef numBombs
+    on UI.click restartButton $ \_ -> handleRestart gridRef stateRef solveRef probRef probText numBombs
     let topRow = UI.row [element bombCounter, element title, element restartButton] # set UI.style [("margin", "auto")]
 
     -- set up solve buttons
     solveButton <- makeSolveButton "Play Move"
     autoButton <- makeSolveButton "Auto Play"
-    on UI.click solveButton $ \_ -> solve gridRef stateRef solveRef probRef
-    on UI.click autoButton $ \_ -> autoSolve gridRef stateRef solveRef probRef autoButton
+    on UI.click solveButton $ \_ -> solve gridRef stateRef solveRef probRef (solveButton, probText)
+    on UI.click autoButton $ \_ -> autoSolve gridRef stateRef solveRef probRef (solveButton, probText, autoButton)
 
-    let bottomRow = UI.row [element solveButton, element autoButton] # set UI.style [("margin", "auto")]
+    let bottomRow = UI.row [element solveButton, element probText, element autoButton] # set UI.style [("margin", "auto")]
 
     getBody window #+
         [
@@ -69,11 +70,11 @@ setup window = do
 
 -- set up click handlers for each cell
 -- left click to reveal cell, right click to place flag
-setOnClick :: IORef Grid -> IORef GameState -> UI ()
-setOnClick gridRef stateRef = do
+setOnClick :: IORef Grid -> IORef GameState -> Element -> UI ()
+setOnClick gridRef stateRef probText = do
     (Grid _ _ cells) <- liftIO $ readIORef gridRef
     mapM_ (clickHandlers gridRef) cells
         where
             clickHandlers gridRef (Cell i square state _) = do
-                on UI.click square $ \_ -> clickCell i gridRef stateRef
-                on UI.contextmenu square $ \_ -> flagCell i gridRef stateRef
+                on UI.click square $ \_ -> clickCell i gridRef stateRef probText
+                on UI.contextmenu square $ \_ -> flagCell i gridRef stateRef probText

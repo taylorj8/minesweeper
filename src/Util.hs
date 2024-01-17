@@ -89,8 +89,3 @@ data ProbabilityList
     | Uncertain (Int, Float)
     | None
     deriving Show
-
--- instance Show ProbabilityList where
---     show (Certain safe unsafe) = show (safe, unsafe)
---     show (Uncertain cell) = show cell
---     show None = "None"
