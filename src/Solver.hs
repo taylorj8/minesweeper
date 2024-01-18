@@ -10,7 +10,7 @@ import Graphics.UI.Threepenny.Core hiding (on)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef, modifyIORef)
 import qualified Data.Vector as V
 import Control.Monad (forever, unless, when, filterM)
-import Data.List (subsequences, partition, nub, groupBy, sortBy, minimumBy)
+import Data.List (subsequences, partition, nub, groupBy, sortBy, minimumBy, sortOn, intersect)
 import Data.Function (on)
 import Data.Ord (comparing)
 import Data.Ratio ((%))
@@ -41,7 +41,7 @@ solve gridRef stateRef currentRef probRef probText = do
                         if success then return True
                         else do
                             element probText # set UI.text "Calculating"
-                            let probList = getProbablityList grid gameState
+                            probList <- getProbablityList grid gameState
                             liftIO $ writeIORef probRef probList
                             case probList of
                                 Uncertain (_, prob) -> do
@@ -154,19 +154,57 @@ probSolve gridRef stateRef probRef probText = do
         _ -> return False
 
 
-getProbablityList :: Grid -> GameState -> ProbabilityList
+getProbablityList :: Grid -> GameState -> UI ProbabilityList
 getProbablityList grid state = case state of
     Playing (_, bombsRemaining) -> do
         let (frontierCells, frontierNeighbours, numOthers) = getFrontier grid
-        let neighbourCells = convertCells frontierNeighbours grid frontierCells
-        -- getPatternGuesses
-        if sum (map (choose (length frontierCells)) [1..(min bombsRemaining (length frontierCells))]) > 50000000 
-        then Naive $ getNaiveGuess neighbourCells
-        else do
-            let arrangements = generateArrangements frontierCells (length frontierCells) bombsRemaining
+        let subsets = connectedSubsequences frontierCells (size grid)
+        t <- trySubsets subsets frontierNeighbours grid bombsRemaining
+        case t of
+            Certain list -> return $ Certain list
+            _ -> do
+                let neighbourCells = convertCells frontierNeighbours grid frontierCells
+                -- getPatternGuesses
+                if sum (map (choose (length frontierCells)) [1..(min bombsRemaining (length frontierCells))]) > 50000000 
+                then return $ Naive $ getNaiveGuess neighbourCells
+                else do
+                    let arrangements = generateArrangements frontierCells (length frontierCells) bombsRemaining
+                    let validArrangements = checkArrangements neighbourCells arrangements
+                    return $ toProbList $ calculateProbabilities validArrangements bombsRemaining numOthers
+    _ -> return None
+
+
+trySubsets :: [[Int]] -> [Cell] -> Grid -> Int -> UI ProbabilityList
+trySubsets subsets frontierNeighbours grid bombsRemaining = do
+    temp <- mapM handleSubsets' subsets
+    case concat temp of
+        [] -> return None
+        list -> return $ Certain list
+    where 
+        handleSubsets' :: [Int] -> UI [Int]
+        handleSubsets' subset = do
+            let arrangements = generateArrangements subset (length subset) bombsRemaining
+            liftIO $ print arrangements
+            let neighbours = filter (\c -> any (\x -> areNeighbours (size grid) x (index c)) subset) frontierNeighbours
+            let neighbourCells = convertCells frontierNeighbours grid subset
             let validArrangements = checkArrangements neighbourCells arrangements
-            toProbList $ calculateProbabilities validArrangements bombsRemaining numOthers
-    _ -> None
+            return $ commmonElements validArrangements
+        
+
+commmonElements :: Eq a => [[a]] -> [a]
+commmonElements [] = []
+commmonElements [x] = x
+commmonElements (x:xs) = foldr intersect x xs
+
+
+connectedSubsequences :: [Int] -> Int -> [[Int]]
+connectedSubsequences cells n = sortOn length $ filter (\x -> length x <= 4) $ filter allConnected $ subsequences cells
+    where 
+        allConnected cells = l > 1 && numConnections cells == (l * 2 - 2) where l = length cells
+        numConnections cells = sum $ map (\x -> length $ filter (areNeighbours n x) cells) cells
+
+areNeighbours :: Int -> Int -> Int -> Bool
+areNeighbours n x y = dist == 1 || dist == n where dist = abs (x - y)
 
 
 getNaiveGuess :: [NeighbourCell] -> (Int, Float)
