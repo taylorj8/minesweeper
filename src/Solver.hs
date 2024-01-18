@@ -43,11 +43,11 @@ solve gridRef stateRef currentRef probRef probText = do
                             (probList, tooLarge) <- getProbablityList grid gameState
                             liftIO $ writeIORef probRef probList
                             element probText # set UI.text ""
-                            case (probList, tooLarge) of
-                                (Uncertain (_, prob), _) -> do
+                            case probList of
+                                Uncertain (_, prob) -> do
                                     element probText # set UI.text (show (round (prob*100)) ++ "%")
                                     return False
-                                (Naive (_, prob), _) -> do
+                                Naive (_, prob) -> do
                                     element probText # set UI.text ("~" ++ (show (round (prob*100)) ++ "%"))
                                     return False
                                 _ -> probSolve gridRef stateRef probRef probText
@@ -143,11 +143,11 @@ probSolve gridRef stateRef probRef probText = do
         Uncertain (safest, prob) -> do
             clickCell safest gridRef stateRef probText
             liftIO $ writeIORef probRef None
-            return False
+            return True
         Naive (safest, prob) -> do
             clickCell safest gridRef stateRef probText
             liftIO $ writeIORef probRef None
-            return False
+            return True
         _ -> return False
 
 
@@ -162,12 +162,12 @@ getProbablityList grid state =
             else do
                 let (arrangements, tooLarge) = generateArrangements frontierCells (length frontierCells) bombsRemaining
                 -- liftIO $ print tooLarge
-                -- liftIO $ print $ length arrangements
+                liftIO $ print $ length arrangements
                 validArrangements <- checkArrangements neighbourCells arrangements
-                -- liftIO $ print validArrangements
+                liftIO $ print validArrangements
                 temp <- calculateProbabilities validArrangements bombsRemaining numOthers
-                -- liftIO $ print temp
-                -- liftIO $ print $ toProbList temp
+                liftIO $ print temp
+                liftIO $ print $ toProbList temp
                 return (toProbList temp, tooLarge)
         _ -> return (None, False)
 
