@@ -10,11 +10,14 @@ import Graphics.UI.Threepenny.Core hiding (on)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef, modifyIORef)
 import qualified Data.Vector as V
 import Control.Monad (forever, unless, when, filterM)
-import Control.Concurrent ( threadDelay )
 import Data.List (subsequences, partition, nub, groupBy, sortBy, minimumBy)
 import Data.Function (on)
 import Data.Ord (comparing)
 import Data.Ratio ((%))
+
+import Control.Concurrent ( threadDelay )
+import Control.Parallel.Strategies
+import Data.Maybe (catMaybes)
 
 
 -- return true if a move was performed
@@ -40,7 +43,7 @@ solve gridRef stateRef currentRef probRef probText = do
                         if success then return True
                         else do
                             element probText # set UI.text "Calculating"
-                            probList <- getProbablityList grid gameState
+                            let probList = getProbablityList grid gameState
                             liftIO $ writeIORef probRef probList
                             element probText # set UI.text ""
                             case probList of
@@ -79,7 +82,8 @@ autoSolve gridRef stateRef currentRef probRef (probText, autoButton) = do
     where
         autoSolve' gridRef stateRef currentRef probRef = do
             continue <- solve gridRef stateRef currentRef probRef probText
-            if continue then
+            if continue then do
+                liftIO $ threadDelay 100
                 autoSolve' gridRef stateRef currentRef probRef
             else do
                 element autoButton # set UI.style [("background-color", "lightgrey")]
@@ -151,25 +155,18 @@ probSolve gridRef stateRef probRef probText = do
         _ -> return False
 
 
-getProbablityList :: Grid -> GameState -> UI ProbabilityList
-getProbablityList grid state =
-    case state of
-        Playing (_, bombsRemaining) -> do
-            let (frontierCells, frontierNeighbours, numOthers) = getFrontier grid
-            let neighbourCells = convertCells frontierNeighbours grid frontierCells
-            if sum (map (choose (length frontierCells)) [1..(min bombsRemaining (length frontierCells))]) > 20000000 then do
-                return $ Naive $ getNaiveGuess neighbourCells
-            else do
-                let arrangements = generateArrangements frontierCells (length frontierCells) bombsRemaining
-                -- liftIO $ print tooLarge
-                liftIO $ print $ length arrangements
-                validArrangements <- checkArrangements neighbourCells arrangements
-                liftIO $ print validArrangements
-                temp <- calculateProbabilities validArrangements bombsRemaining numOthers
-                liftIO $ print temp
-                liftIO $ print $ toProbList temp
-                return $ toProbList temp
-        _ -> return None
+getProbablityList :: Grid -> GameState -> ProbabilityList
+getProbablityList grid state = case state of
+    Playing (_, bombsRemaining) -> do
+        let (frontierCells, frontierNeighbours, numOthers) = getFrontier grid
+        let neighbourCells = convertCells frontierNeighbours grid frontierCells
+        if sum (map (choose (length frontierCells)) [1..(min bombsRemaining (length frontierCells))]) > 50000000 
+        then Naive $ getNaiveGuess neighbourCells
+        else do
+            let arrangements = generateArrangements frontierCells (length frontierCells) bombsRemaining
+            let validArrangements = checkArrangements neighbourCells arrangements
+            toProbList $ calculateProbabilities validArrangements bombsRemaining numOthers
+    _ -> None
 
 
 getNaiveGuess :: [NeighbourCell] -> (Int, Float)
@@ -224,26 +221,12 @@ stateIs s c = cellState c == s
 generateArrangements :: [Int] -> Int -> Int -> [[Int]]
 generateArrangements indexes numCells numBombs = filter (\x -> length x <= min numBombs numCells) $ drop 1 $ subsequences indexes
 
--- subseq :: Int -> [Int] -> [[Int]]
--- subseq _ [] = []
--- subseq n (x : xs) = do
---     x : subseq n xs
-
--- modified version of subsequences
--- stops recursing when length n is reached
-subseq :: Int -> [a] -> [[a]]
-subseq _ [] = []
-subseq n (x:xs) = [x] : foldr f [] (subseq n xs)
-    where f ys r = if length ys < n then ys : (x : ys) : r else ys : r
-
 
 -- take all possible arrangements and filter out invalid arrangements
-checkArrangements :: [NeighbourCell] -> [[Int]] -> UI [[Int]]
-checkArrangements frontierNeighbours arrangements =
-    return $ filter isValidArrangement arrangements
+checkArrangements :: [NeighbourCell] -> [[Int]] -> [[Int]]
+checkArrangements frontierNeighbours = filter isValidArrangement 
     where
-        isValidArrangement arrangement =
-            all (isValid arrangement) frontierNeighbours
+        isValidArrangement arrangement = all (isValid arrangement) frontierNeighbours
         isValid arrangement cell = case cell of
             (n, neighbours) -> do
                 -- count the surrounding flags, valid if equal to number in cell
@@ -251,12 +234,12 @@ checkArrangements frontierNeighbours arrangements =
                 n == numFlagged
 
 
-calculateProbabilities :: [[Int]] -> Int -> Int -> UI [(Int, Rational)]
+calculateProbabilities :: [[Int]] -> Int -> Int -> [(Int, Rational)]
 calculateProbabilities arrangements remainingBombs numOthers = do
     let counts = map (ch . length) arrangements
     let totalArrangements = sum counts
     let weightedCounts = weightedCount arrangements counts
-    return $ map (\(i, prob) -> (i, prob % totalArrangements)) weightedCounts
+    map (\(i, prob) -> (i, prob % totalArrangements)) weightedCounts
     where
         ch bombsPlaced = numOthers `choose` (remainingBombs - bombsPlaced)
         weightedCount :: [[Int]] -> [Integer] -> [(Int, Integer)]

@@ -22,4 +22,5 @@ executable Minesweeper
                      , random
                      , time
                      , vector
+                     , parallel
 
