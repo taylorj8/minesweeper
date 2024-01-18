@@ -50,7 +50,8 @@ instance Eq Cell where
 
 -- show B for bomb or number in empty cell
 instance Show Cell where
-    show (Cell index _ state typ) = show index
+    show (Cell index _ state (Empty n)) = show (index, n)
+    show (Cell index _ _ _) = show (index, -1)
 
 instance Show CellType where
     show Bomb = "B"

@@ -9,7 +9,7 @@ import qualified Graphics.UI.Threepenny as UI
 import Graphics.UI.Threepenny.Core hiding (on)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef, modifyIORef)
 import qualified Data.Vector as V
-import Control.Monad (forever, unless)
+import Control.Monad (forever, unless, when, filterM)
 import Control.Concurrent ( threadDelay )
 import Data.List (subsequences, partition, nub, groupBy, sortBy, minimumBy)
 import Data.Function (on)
@@ -132,19 +132,21 @@ getProbablityList grid state = do
         Playing (_, bombsRemaining) -> do
             let (frontierCells, frontierNeighbours, numOthers) = getFrontier grid
             let (arrangements, tooLarge) = generateArrangements frontierCells (length frontierCells) bombsRemaining
-            liftIO $ print tooLarge
+            -- liftIO $ print tooLarge
             liftIO $ print $ length arrangements
             validArrangements <- checkArrangements grid frontierNeighbours arrangements
-            liftIO $ print $ length validArrangements
+            when (length arrangements < 50) $ liftIO $ do
+                print arrangements
+                print validArrangements
             temp <- calculateProbabilities validArrangements bombsRemaining numOthers
-            liftIO $ print temp
+            -- liftIO $ print temp
             liftIO $ print $ toProbList temp
             return (toProbList temp, tooLarge)
         _ -> return (None, False)
 
 toProbList :: [(Int, Rational)] -> ProbabilityList
 toProbList probs = do
-    case partition ((==1.0) . snd) probs of 
+    case partition ((==1.0) . snd) probs of
         ([], []) -> None
         ([], uncertain) -> Uncertain $ getSafest uncertain
         (bombs, _) -> Certain (map fst bombs)
@@ -167,36 +169,36 @@ getFrontier grid = do
             any (stateIs Revealed) neighbours
 
 
--- sortFrontierCells :: Int -> [Int] -> [Int]
--- sortFrontierCells _ [] = []
--- sortFrontierCells _ [x] = [x]
--- sortFrontierCells n cells = sortedCells
---     where
---         neighbors = map (\x -> (x, filter (areNeighbours x) cells)) cells
---         sortedNeighbors = sortBy (comparing snd) neighbors
---         sortedCells = map fst sortedNeighbors
---         areNeighbours x y = abs (x - y) == 1 || abs (x - y) == n
-
-
 stateIs :: CellState -> Cell -> Bool
 stateIs s c = cellState c == s
 
 
 -- generate all possible arrangements
--- if too many, stop at 10,000,000 - this may cause inaccurate predictions
+-- if too many, stop at 100,000,000 - this may cause inaccurate predictions
 -- first arrangement can be dropped as it's always the empty list
 generateArrangements :: [Int] -> Int -> Int -> ([[Int]], Bool)
-generateArrangements indexes numCells numBombs = (take n $ drop 1 $ subsequences indexes, tooLarge)
-    where 
-        m = sum $ map (choose numCells) [0..(min numBombs numCells)]
-        n = fromInteger $ min m 10000000
-        tooLarge = m > 10000000
+generateArrangements indexes numCells numBombs = (filter (\x -> length x <= min numBombs numCells) $ drop 1 $ subsequences indexes, tooLarge)
+    where
+        m = sum $ map (choose numCells) [1..(min numBombs numCells)]
+        n = fromInteger $ min m 100000000
+        tooLarge = m > 100000000
 
+-- subseq :: Int -> [Int] -> [[Int]]
+-- subseq _ [] = []
+-- subseq n (x : xs) = do
+--     x : subseq n xs
+
+-- modified version of subsequences
+-- stops recursing when length n is reached
+subseq :: Int -> [a] -> [[a]]
+subseq _ [] = []
+subseq n (x:xs) = [x] : foldr f [] (subseq n xs)
+    where f ys r = if length ys < n then ys : (x : ys) : r else ys : r
 
 -- take all possible arrangements and filter out invalid arrangements
 checkArrangements :: Grid -> [Cell] -> [[Int]] -> UI [[Int]]
 checkArrangements grid frontierNeighbours arr = do
-    liftIO $ print frontierNeighbours
+    liftIO $ print $ "Neighbours: " ++ show frontierNeighbours
     return $ filter isValidArrangement arr
     where
         isValidArrangement arrangement = do
