@@ -22,5 +22,4 @@ executable Minesweeper
                      , random
                      , time
                      , vector
-                     , exact-combinatorics
 

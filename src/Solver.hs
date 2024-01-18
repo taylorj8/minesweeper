@@ -135,9 +135,7 @@ getProbablityList grid state = do
             -- liftIO $ print tooLarge
             liftIO $ print $ length arrangements
             validArrangements <- checkArrangements grid frontierNeighbours arrangements
-            when (length arrangements < 50) $ liftIO $ do
-                print arrangements
-                print validArrangements
+            liftIO $ print validArrangements
             temp <- calculateProbabilities validArrangements bombsRemaining numOthers
             -- liftIO $ print temp
             liftIO $ print $ toProbList temp
@@ -174,14 +172,15 @@ stateIs s c = cellState c == s
 
 
 -- generate all possible arrangements
--- if too many, stop at 100,000,000 - this may cause inaccurate predictions
+-- if too many, stop at 20,000,000 - this may cause inaccurate predictions
 -- first arrangement can be dropped as it's always the empty list
 generateArrangements :: [Int] -> Int -> Int -> ([[Int]], Bool)
-generateArrangements indexes numCells numBombs = (filter (\x -> length x <= min numBombs numCells) $ drop 1 $ subsequences indexes, tooLarge)
+generateArrangements indexes numCells numBombs = (take n $ filter (\x -> lengthWithinRange x (numCells `div` 3) (min numBombs numCells)) $ drop 1 $ subsequences indexes, tooLarge)
     where
         m = sum $ map (choose numCells) [1..(min numBombs numCells)]
-        n = fromInteger $ min m 100000000
-        tooLarge = m > 100000000
+        n = fromInteger $ min m 20000000
+        tooLarge = m > 20000000
+        lengthWithinRange list l u = len >= l && len <= u where len = length list
 
 -- subseq :: Int -> [Int] -> [[Int]]
 -- subseq _ [] = []
@@ -195,10 +194,11 @@ subseq _ [] = []
 subseq n (x:xs) = [x] : foldr f [] (subseq n xs)
     where f ys r = if length ys < n then ys : (x : ys) : r else ys : r
 
+
 -- take all possible arrangements and filter out invalid arrangements
 checkArrangements :: Grid -> [Cell] -> [[Int]] -> UI [[Int]]
 checkArrangements grid frontierNeighbours arr = do
-    liftIO $ print $ "Neighbours: " ++ show frontierNeighbours
+    -- liftIO $ print $ "Neighbours: " ++ show frontierNeighbours
     return $ filter isValidArrangement arr
     where
         isValidArrangement arrangement = do
@@ -233,6 +233,6 @@ calculateProbabilities arrangements remainingBombs numOthers = do
 choose :: Int -> Int -> Integer
 choose n k = choose' (toInteger n) (toInteger k)
     where
-        choose' n 0 = 1
-        choose' 0 k = 0
+        choose' _ 0 = 1
+        choose' 0 _ = 0
         choose' n k = choose' (n-1) (k-1) * n `div` k
