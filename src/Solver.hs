@@ -40,7 +40,7 @@ solve gridRef stateRef currentRef probRef probText = do
                         if success then return True
                         else do
                             element probText # set UI.text "Calculating"
-                            (probList, tooLarge) <- getProbablityList grid gameState
+                            probList <- getProbablityList grid gameState
                             liftIO $ writeIORef probRef probList
                             element probText # set UI.text ""
                             case probList of
@@ -151,16 +151,16 @@ probSolve gridRef stateRef probRef probText = do
         _ -> return False
 
 
-getProbablityList :: Grid -> GameState -> UI (ProbabilityList, Bool)
+getProbablityList :: Grid -> GameState -> UI ProbabilityList
 getProbablityList grid state =
     case state of
         Playing (_, bombsRemaining) -> do
             let (frontierCells, frontierNeighbours, numOthers) = getFrontier grid
             let neighbourCells = convertCells frontierNeighbours grid frontierCells
             if sum (map (choose (length frontierCells)) [1..(min bombsRemaining (length frontierCells))]) > 20000000 then do
-                return (Naive $ getNaiveGuess neighbourCells, True)
+                return $ Naive $ getNaiveGuess neighbourCells
             else do
-                let (arrangements, tooLarge) = generateArrangements frontierCells (length frontierCells) bombsRemaining
+                let arrangements = generateArrangements frontierCells (length frontierCells) bombsRemaining
                 -- liftIO $ print tooLarge
                 liftIO $ print $ length arrangements
                 validArrangements <- checkArrangements neighbourCells arrangements
@@ -168,8 +168,8 @@ getProbablityList grid state =
                 temp <- calculateProbabilities validArrangements bombsRemaining numOthers
                 liftIO $ print temp
                 liftIO $ print $ toProbList temp
-                return (toProbList temp, tooLarge)
-        _ -> return (None, False)
+                return $ toProbList temp
+        _ -> return None
 
 
 getNaiveGuess :: [NeighbourCell] -> (Int, Float)
@@ -219,16 +219,10 @@ stateIs :: CellState -> Cell -> Bool
 stateIs s c = cellState c == s
 
 
--- generate all possible arrangements
--- if too many, stop at 20,000,000 - this may cause inaccurate predictions
+-- generate all possible arrangements of bombs
 -- first arrangement can be dropped as it's always the empty list
-generateArrangements :: [Int] -> Int -> Int -> ([[Int]], Bool)
-generateArrangements indexes numCells numBombs = (take n $ filter (\x -> lengthWithinRange x (numCells `div` 3) (min numBombs numCells)) $ drop 1 $ subsequences indexes, tooLarge)
-    where
-        m = sum $ map (choose numCells) [1..(min numBombs numCells)]
-        n = fromInteger $ min m 20000000
-        tooLarge = m > 20000000
-        lengthWithinRange list l u = len >= l && len <= u where len = length list
+generateArrangements :: [Int] -> Int -> Int -> [[Int]]
+generateArrangements indexes numCells numBombs = filter (\x -> length x <= min numBombs numCells) $ drop 1 $ subsequences indexes
 
 -- subseq :: Int -> [Int] -> [[Int]]
 -- subseq _ [] = []
