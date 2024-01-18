@@ -90,3 +90,5 @@ data ProbabilityList
     | Uncertain (Int, Rational)
     | None
     deriving Show
+
+type NeighbourCell = (Int, [Int])

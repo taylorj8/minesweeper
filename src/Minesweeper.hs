@@ -157,7 +157,7 @@ clickCell index gridRef stateRef probText = do
             (Grid n _ _) <- liftIO $ readIORef gridRef
             liftIO $ writeIORef stateRef $ Playing (n*n - numBombs, numBombs)
             seed <- liftIO sysTime
-            liftIO $ modifyIORef gridRef $ resetGrid numBombs index 112
+            liftIO $ modifyIORef gridRef $ resetGrid numBombs index seed
             revealCells index gridRef stateRef
         -- when in game
         -- if hidden cell clicked on, reveal cells

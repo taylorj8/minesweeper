@@ -27,27 +27,47 @@ solve gridRef stateRef currentRef probRef probText = do
         GameStart _ -> do
             clickCell (middleIndex grid) gridRef stateRef probText
             return True
-        Playing _ -> do
-            probs <- liftIO $ readIORef probRef
-            case probs of
-                None -> do
-                    success <- basicSolve gridRef stateRef currentRef probText
-                    if success then return True
-                    else do
-                        element probText # set UI.text "Calculating"
-                        (probList, tooLarge) <- getProbablityList grid gameState
-                        liftIO $ writeIORef probRef probList
-                        element probText # set UI.text ""
-                        case (probList, tooLarge) of
-                            (_, True) -> do
-                                element probText # set UI.text "Uncertain"
-                                return False
-                            (Uncertain (_, prob), False) -> do
-                                element probText # set UI.text (show (round (prob*100)) ++ "%")
-                                return False
-                            _ -> probSolve gridRef stateRef probRef probText
-                _ -> probSolve gridRef stateRef probRef probText
+        Playing (_, bombsRemaining) -> do
+            -- if no bombs left, click all remaining cells
+            if bombsRemaining == 0 then do
+                clickRemaining gridRef stateRef currentRef probText
+                return True
+            else do
+                probs <- liftIO $ readIORef probRef
+                case probs of
+                    None -> do
+                        success <- basicSolve gridRef stateRef currentRef probText
+                        if success then return True
+                        else do
+                            element probText # set UI.text "Calculating"
+                            (probList, tooLarge) <- getProbablityList grid gameState
+                            liftIO $ writeIORef probRef probList
+                            element probText # set UI.text ""
+                            case (probList, tooLarge) of
+                                (_, True) -> do
+                                    element probText # set UI.text "Uncertain"
+                                    return False
+                                (Uncertain (_, prob), False) -> do
+                                    element probText # set UI.text (show (round (prob*100)) ++ "%")
+                                    return False
+                                _ -> probSolve gridRef stateRef probRef probText
+                    _ -> probSolve gridRef stateRef probRef probText
         _ -> return False
+
+
+-- handles case of bombs stuck behind row of bombs
+clickRemaining ::  IORef Grid -> IORef GameState -> IORef Int -> Element -> UI ()
+clickRemaining gridRef stateRef currentRef probText = do
+    cur <- liftIO $ readIORef currentRef
+    clickRemaining' cur
+    where 
+        clickRemaining' index = do
+            grid <- liftIO $ readIORef gridRef
+            case grid `getCell` index of 
+                (Cell index _ Hidden _) -> do
+                    liftIO $ writeIORef currentRef (index + 1)
+                    clickCell index gridRef stateRef probText
+                _ -> clickRemaining' (index + 1)
 
 
 -- repeatedly call solve until no remaining moves
@@ -134,7 +154,8 @@ getProbablityList grid state = do
             let (arrangements, tooLarge) = generateArrangements frontierCells (length frontierCells) bombsRemaining
             -- liftIO $ print tooLarge
             liftIO $ print $ length arrangements
-            validArrangements <- checkArrangements grid frontierNeighbours arrangements
+            let neighbourCells = convertCells frontierNeighbours grid frontierCells
+            validArrangements <- checkArrangements neighbourCells arrangements
             liftIO $ print validArrangements
             temp <- calculateProbabilities validArrangements bombsRemaining numOthers
             -- liftIO $ print temp
@@ -167,6 +188,17 @@ getFrontier grid = do
             any (stateIs Revealed) neighbours
 
 
+convertCells :: [Cell] -> Grid -> [Int] -> [NeighbourCell]
+convertCells frontierNeighbours grid frontierCells = map convertCell frontierNeighbours
+    where
+        convertCell (Cell index _ _ (Empty num)) = do
+            let surCells = getNeighbours grid index
+            let newNum = num - length (filter (stateIs Flagged) surCells)
+            let neighbours = filter (`elem` frontierCells) $ findNeighbours index (size grid)
+            (newNum, neighbours)
+        convertCell _ = (0, [])
+
+
 stateIs :: CellState -> Cell -> Bool
 stateIs s c = cellState c == s
 
@@ -196,22 +228,20 @@ subseq n (x:xs) = [x] : foldr f [] (subseq n xs)
 
 
 -- take all possible arrangements and filter out invalid arrangements
-checkArrangements :: Grid -> [Cell] -> [[Int]] -> UI [[Int]]
-checkArrangements grid frontierNeighbours arr = do
+checkArrangements :: [NeighbourCell] -> [[Int]] -> UI [[Int]]
+checkArrangements frontierNeighbours arrangements = do
     -- liftIO $ print $ "Neighbours: " ++ show frontierNeighbours
-    return $ filter isValidArrangement arr
+    return $ filter isValidArrangement arrangements
     where
         isValidArrangement arrangement = do
             -- make grid with cells in arrangement flagged and check if valid
-            let grid' = toggleFlagged arrangement grid
-            all (isValid grid') frontierNeighbours
-        isValid grid' cell = case cell of
-            (Cell index _ _ (Empty n)) -> do
+            -- let grid' = toggleFlagged arrangement grid
+            all (isValid arrangement) frontierNeighbours
+        isValid arrangement cell = case cell of
+            (n, neighbours) -> do
                 -- count the surrounding flags, valid if equal to number in cell
-                let surCells = getNeighbours grid' index
-                let numFlagged = length $ filter (stateIs Flagged) surCells
+                let numFlagged = length $ filter (`elem` arrangement) neighbours
                 n == numFlagged
-            _ -> False
 
 
 calculateProbabilities :: [[Int]] -> Int -> Int -> UI [(Int, Rational)]
