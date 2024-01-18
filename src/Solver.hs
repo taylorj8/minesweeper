@@ -1,5 +1,3 @@
-{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
-{-# HLINT ignore "Use when" #-}
 module Solver where
 
 import Util
@@ -29,35 +27,46 @@ solve gridRef stateRef currentRef probRef probText = do
             clickCell (middleIndex grid) gridRef stateRef probText
             return True
         Playing (_, bombsRemaining) -> do
-            -- if no bombs left, click all remaining cells
+            -- if no bombs left, click remaining cells
             if bombsRemaining == 0 then do
                 clickRemaining gridRef stateRef currentRef probText
                 return True
             else do
                 probs <- liftIO $ readIORef probRef
                 case probs of
+                    -- if no probabilistic move calculated follow logic rules
                     None -> do
-                        success <- basicSolve gridRef stateRef currentRef probText
+                        success <- logicSolve gridRef stateRef currentRef probText
                         if success then return True
                         else do
+                            -- if logical move can't be found, calculate probabilistic move
                             element probText # set UI.text "Calculating"
-                            let probList = getProbablityList grid gameState
+                            let probList = getProbableMove grid gameState
                             liftIO $ writeIORef probRef probList
                             case probList of
+                                -- if move found is uncertain or naive, show probability but don't take move
+                                -- move is taken on next solve
                                 Uncertain (_, prob) -> do
                                     element probText # set UI.text (show (round (prob*100)) ++ "%")
                                     return False
                                 Naive (_, prob) -> do
                                     element probText # set UI.text ("~" ++ (show (round (prob*100)) ++ "%"))
                                     return False
-                                _ -> do 
+                                -- otherwise make move
+                                Certain (flag : rest) -> do
                                     element probText # set UI.text ""
-                                    probSolve gridRef stateRef probRef probText
-                    _ -> probSolve gridRef stateRef probRef probText
+                                    flagCell flag gridRef stateRef probText
+                                    if null rest then liftIO $ writeIORef probRef None
+                                    else liftIO $ writeIORef probRef $ Certain rest
+                                    return True
+                                _ -> return False
+                    -- uncertain/naive moves from last turn are taken here
+                    -- also certain moves if more than one found
+                    _ -> takeProbableMove gridRef stateRef probRef probText
         _ -> return False
 
 
--- handles case of bombs stuck behind row of bombs
+-- handles case of cells stuck behind row of bombs
 clickRemaining :: IORef Grid -> IORef GameState -> IORef Int -> Element -> UI ()
 clickRemaining gridRef stateRef currentRef probText = do
     cur <- liftIO $ readIORef currentRef
@@ -76,15 +85,19 @@ clickRemaining gridRef stateRef currentRef probText = do
 -- repeatedly call solve until no remaining moves
 autoSolve :: IORef Grid -> IORef GameState -> IORef Int -> IORef ProbabilityList -> (Element, Element) -> UI ()
 autoSolve gridRef stateRef currentRef probRef (probText, autoButton) = do
+    -- highlight button while auto solver running
     element autoButton # set UI.style [("background-color", "LightGoldenRodYellow")]
     autoSolve' gridRef stateRef currentRef probRef
     where
         autoSolve' gridRef stateRef currentRef probRef = do
+            -- repeat unless false returned, i.e. move not taken
+            -- allows user to choose whether to take chance
             continue <- solve gridRef stateRef currentRef probRef probText
             if continue then do
-                liftIO $ threadDelay 1000
+                liftIO $ threadDelay 10000  -- delay for dramatic effect
                 autoSolve' gridRef stateRef currentRef probRef
             else do
+                -- unhighlight button to show stop
                 element autoButton # set UI.style [("background-color", "lightgrey")]
                 return ()
 
@@ -97,9 +110,10 @@ middleIndex (Grid n _ _) = case n `mod` 2 of
     _ -> n * n `div` 2 - n `div` 2
 
 
--- returns true if move performed
-basicSolve :: IORef Grid -> IORef GameState -> IORef Int -> Element -> UI Bool
-basicSolve gridRef stateRef currentRef probText = do
+-- try to find a move based on simple logic rules
+-- any moves found are always safe
+logicSolve :: IORef Grid -> IORef GameState -> IORef Int -> Element -> UI Bool
+logicSolve gridRef stateRef currentRef probText = do
     current <- liftIO $ readIORef currentRef
     grid <- liftIO $ readIORef gridRef
     solveFlags' grid current 0
@@ -134,15 +148,21 @@ basicSolve gridRef stateRef currentRef probText = do
             return True
 
 
-probSolve :: IORef Grid -> IORef GameState -> IORef ProbabilityList -> Element -> UI Bool
-probSolve gridRef stateRef probRef probText = do
+-- check the probability list and perform the move inside
+-- could be a safe or unsafe move
+takeProbableMove :: IORef Grid -> IORef GameState -> IORef ProbabilityList -> Element -> UI Bool
+takeProbableMove gridRef stateRef probRef probText = do
     probList <- liftIO $ readIORef probRef
     case probList of
+        -- contains list of guaranteed bombs
         Certain (flag : rest) -> do
+            -- flag first in list then update IORef with remaining
             flagCell flag gridRef stateRef probText
             if null rest then liftIO $ writeIORef probRef None
             else liftIO $ writeIORef probRef $ Certain rest
             return True
+        -- both below contain the safest cell found from unsafe options
+        -- click it and update IORef
         Uncertain (safest, prob) -> do
             clickCell safest gridRef stateRef probText
             liftIO $ writeIORef probRef None
@@ -154,8 +174,8 @@ probSolve gridRef stateRef probRef probText = do
         _ -> return False
 
 
-getProbablityList :: Grid -> GameState -> ProbabilityList
-getProbablityList grid state = case state of
+getProbableMove :: Grid -> GameState -> ProbabilityList
+getProbableMove grid state = case state of
     Playing (_, bombsRemaining) -> do
         let (frontierCells, frontierNeighbours, numOthers) = getFrontier grid
         let neighbourCells = convertCells frontierNeighbours grid frontierCells
