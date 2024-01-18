@@ -64,8 +64,8 @@ clickRemaining gridRef stateRef currentRef probText = do
         clickRemaining' index = do
             grid <- liftIO $ readIORef gridRef
             let index' = index `mod` squareSize grid
-            case grid `getCell` index of
-                (Cell index _ Hidden _) -> do
+            case cellState (grid `getCell` index') of
+                Hidden -> do
                     liftIO $ writeIORef currentRef (index' + 1)
                     clickCell index' gridRef stateRef probText
                 _ -> clickRemaining' (index' + 1)
@@ -162,12 +162,12 @@ getProbablityList grid state =
             else do
                 let (arrangements, tooLarge) = generateArrangements frontierCells (length frontierCells) bombsRemaining
                 -- liftIO $ print tooLarge
-                liftIO $ print $ length arrangements
+                -- liftIO $ print $ length arrangements
                 validArrangements <- checkArrangements neighbourCells arrangements
-                liftIO $ print validArrangements
+                -- liftIO $ print validArrangements
                 temp <- calculateProbabilities validArrangements bombsRemaining numOthers
                 -- liftIO $ print temp
-                liftIO $ print $ toProbList temp
+                -- liftIO $ print $ toProbList temp
                 return (toProbList temp, tooLarge)
         _ -> return (None, False)
 

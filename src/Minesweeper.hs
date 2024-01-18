@@ -188,6 +188,8 @@ revealCells index gridRef stateRef = do
 -- also handles lose condition
 revealCell :: Grid -> IORef GameState -> Int -> UI Element
 revealCell grid stateRef index = do
+    -- let temp = cells grid V.!? index
+    -- when (isMaybe temp) liftIO $ print
     let (Cell _ square state typ) = cells grid V.! index
     case state of
         -- cell should only be updated if it is currently hidden
