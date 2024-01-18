@@ -10,7 +10,8 @@ import Graphics.UI.Threepenny.Core hiding (on)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef, modifyIORef)
 import qualified Data.Vector as V
 import Control.Monad (forever, unless, when, filterM)
-import Control.Concurrent ( threadDelay )
+import Control.Concurrent (threadDelay)
+import Control.Parallel.Strategies
 import Data.List (subsequences, partition, nub, groupBy, sortBy, minimumBy)
 import Data.Function (on)
 import Data.Ord (comparing)
@@ -18,24 +19,25 @@ import Data.Ratio ((%))
 
 
 -- return true if a move was performed
-solve :: IORef Grid -> IORef GameState -> IORef Int -> IORef ProbabilityList -> Element -> UI Bool
-solve gridRef stateRef currentRef probRef probText = do
+solve :: IORef Grid -> IORef GameState -> IORef Int -> IORef ProbabilityList -> Element -> IORef Bool -> IORef Int -> UI Bool
+solve gridRef stateRef currentRef probRef probText parRef sRef = do
     gameState <- liftIO $ readIORef stateRef
     grid <- liftIO $ readIORef gridRef
+    usePar <- liftIO $ readIORef parRef
     case gameState of
         -- first move - click cell in middle
         GameStart _ -> do
-            clickCell (middleIndex grid) gridRef stateRef probText
+            clickCell sRef (middleIndex grid) gridRef stateRef probText
             return True
         Playing _ -> do
             probs <- liftIO $ readIORef probRef
             case probs of
                 None -> do
-                    success <- basicSolve gridRef stateRef currentRef probText
+                    success <- basicSolve gridRef stateRef currentRef probText sRef
                     if success then return True
                     else do
                         element probText # set UI.text "Calculating"
-                        (probList, tooLarge) <- getProbablityList grid gameState
+                        (probList, tooLarge) <- getProbablityList grid gameState usePar
                         liftIO $ writeIORef probRef probList
                         element probText # set UI.text ""
                         case (probList, tooLarge) of
@@ -45,19 +47,19 @@ solve gridRef stateRef currentRef probRef probText = do
                             (Uncertain (_, prob), False) -> do
                                 element probText # set UI.text (show (round (prob*100)) ++ "%")
                                 return False
-                            _ -> probSolve gridRef stateRef probRef probText
-                _ -> probSolve gridRef stateRef probRef probText
+                            _ -> probSolve gridRef stateRef probRef probText sRef
+                _ -> probSolve gridRef stateRef probRef probText sRef
         _ -> return False
 
 
 -- repeatedly call solve until no remaining moves
-autoSolve :: IORef Grid -> IORef GameState -> IORef Int -> IORef ProbabilityList -> (Element, Element) -> UI ()
-autoSolve gridRef stateRef currentRef probRef (probText, autoButton) = do
+autoSolve :: IORef Grid -> IORef GameState -> IORef Int -> IORef ProbabilityList -> (Element, Element) -> IORef Bool -> IORef Int -> UI ()
+autoSolve gridRef stateRef currentRef probRef (probText, autoButton) parRef sRef = do
     element autoButton # set UI.style [("background-color", "LightGoldenRodYellow")]
     autoSolve' gridRef stateRef currentRef probRef
     where
         autoSolve' gridRef stateRef currentRef probRef = do
-            continue <- solve gridRef stateRef currentRef probRef probText
+            continue <- solve gridRef stateRef currentRef probRef probText parRef sRef
             if continue then
                 autoSolve' gridRef stateRef currentRef probRef
             else do
@@ -74,8 +76,8 @@ middleIndex (Grid n _ _) = case n `mod` 2 of
 
 
 -- returns true if move performed
-basicSolve :: IORef Grid -> IORef GameState -> IORef Int -> Element -> UI Bool
-basicSolve gridRef stateRef currentRef probText = do
+basicSolve :: IORef Grid -> IORef GameState -> IORef Int -> Element -> IORef Int -> UI Bool
+basicSolve gridRef stateRef currentRef probText sRef = do
     current <- liftIO $ readIORef currentRef
     grid <- liftIO $ readIORef gridRef
     solveFlags' grid current 0
@@ -98,7 +100,7 @@ basicSolve gridRef stateRef currentRef probText = do
                     -- two basic rules (explained in report)
                     -- if neither apply, try next cell
                     if null hiddenCells then solveFlags' grid (current+1) (iterations+1)
-                    else if n - numFlagged == 0 then makeMove hiddenCells current probText clickCell
+                    else if n - numFlagged == 0 then makeMove hiddenCells current probText (clickCell sRef)
                     else if n - numFlagged == length hiddenCells then makeMove hiddenCells current probText flagCell
                     else solveFlags' grid (current+1) (iterations+1)
 
@@ -110,8 +112,8 @@ basicSolve gridRef stateRef currentRef probText = do
             return True
 
 
-probSolve :: IORef Grid -> IORef GameState -> IORef ProbabilityList -> Element -> UI Bool
-probSolve gridRef stateRef probRef probText = do
+probSolve :: IORef Grid -> IORef GameState -> IORef ProbabilityList -> Element -> IORef Int -> UI Bool
+probSolve gridRef stateRef probRef probText sRef = do
     probList <- liftIO $ readIORef probRef
     case probList of
         Certain (flag : rest) -> do
@@ -120,14 +122,14 @@ probSolve gridRef stateRef probRef probText = do
             else liftIO $ writeIORef probRef $ Certain rest
             return True
         Uncertain (safest, prob) -> do
-            clickCell safest gridRef stateRef probText
+            clickCell sRef safest gridRef stateRef probText
             liftIO $ writeIORef probRef None
             return False
         _ -> return False
 
 
-getProbablityList :: Grid -> GameState -> UI (ProbabilityList, Bool)
-getProbablityList grid state = do
+getProbablityList :: Grid -> GameState -> Bool -> UI (ProbabilityList, Bool)
+getProbablityList grid state usePar = do
     case state of
         Playing (_, bombsRemaining) -> do
             let (frontierCells, frontierNeighbours, numOthers) = getFrontier grid
@@ -135,12 +137,11 @@ getProbablityList grid state = do
             -- liftIO $ print tooLarge
             liftIO $ print $ length arrangements
             validArrangements <- checkArrangements grid frontierNeighbours arrangements
-            when (length arrangements < 50) $ liftIO $ do
-                print arrangements
-                print validArrangements
-            temp <- calculateProbabilities validArrangements bombsRemaining numOthers
+            liftIO $ print $ length validArrangements
+            temp <- calculateProbabilities validArrangements bombsRemaining numOthers usePar
+            -- liftIO $ print $ length temp
             -- liftIO $ print temp
-            liftIO $ print $ toProbList temp
+            -- liftIO $ print $ toProbList temp
             return (toProbList temp, tooLarge)
         _ -> return (None, False)
 
@@ -174,14 +175,14 @@ stateIs s c = cellState c == s
 
 
 -- generate all possible arrangements
--- if too many, stop at 100,000,000 - this may cause inaccurate predictions
+-- if too many, stop at 20,000,000 - this may cause inaccurate predictions
 -- first arrangement can be dropped as it's always the empty list
 generateArrangements :: [Int] -> Int -> Int -> ([[Int]], Bool)
-generateArrangements indexes numCells numBombs = (filter (\x -> length x <= min numBombs numCells) $ drop 1 $ subsequences indexes, tooLarge)
+generateArrangements indexes numCells numBombs = (take n $ filter (\x -> length x <= min numBombs numCells) $ drop 1 $ subsequences indexes, tooLarge)
     where
         m = sum $ map (choose numCells) [1..(min numBombs numCells)]
-        n = fromInteger $ min m 100000000
-        tooLarge = m > 100000000
+        n = fromInteger $ min m 20000000
+        tooLarge = m > 20000000
 
 -- subseq :: Int -> [Int] -> [[Int]]
 -- subseq _ [] = []
@@ -198,7 +199,7 @@ subseq n (x:xs) = [x] : foldr f [] (subseq n xs)
 -- take all possible arrangements and filter out invalid arrangements
 checkArrangements :: Grid -> [Cell] -> [[Int]] -> UI [[Int]]
 checkArrangements grid frontierNeighbours arr = do
-    liftIO $ print $ "Neighbours: " ++ show frontierNeighbours
+    -- liftIO $ print $ "Neighbours: " ++ show frontierNeighbours
     return $ filter isValidArrangement arr
     where
         isValidArrangement arrangement = do
@@ -214,12 +215,15 @@ checkArrangements grid frontierNeighbours arr = do
             _ -> False
 
 
-calculateProbabilities :: [[Int]] -> Int -> Int -> UI [(Int, Rational)]
-calculateProbabilities arrangements remainingBombs numOthers = do
+calculateProbabilities :: [[Int]] -> Int -> Int -> Bool -> UI [(Int, Rational)]
+calculateProbabilities arrangements remainingBombs numOthers usePar = do
     let counts = map (ch . length) arrangements
     let totalArrangements = sum counts
     let weightedCounts = weightedCount arrangements counts
-    return $ map (\(i, prob) -> (i, prob % totalArrangements)) weightedCounts
+    if usePar then do
+        liftIO $ print "!!!"
+        return (map (\(i, prob) -> (i, prob % totalArrangements)) weightedCounts `using` parListChunk 10000 rdeepseq)
+    else return $ map (\(i, prob) -> (i, prob % totalArrangements)) weightedCounts
     where
         ch bombsPlaced = numOthers `choose` (remainingBombs - bombsPlaced)
         weightedCount :: [[Int]] -> [Integer] -> [(Int, Integer)]

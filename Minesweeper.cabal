@@ -22,5 +22,6 @@ executable Minesweeper
                      , random
                      , time
                      , vector
-                     , exact-combinatorics
+                     , parallel
+  ghc-options:       -threaded -rtsopts -eventlog
 

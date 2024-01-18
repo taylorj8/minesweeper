@@ -145,10 +145,11 @@ updateCells indexes (Grid n c cells) = do
 
 
 -- handles left click
-clickCell :: Int -> IORef Grid -> IORef GameState -> Element -> UI ()
-clickCell index gridRef stateRef probText = do
+clickCell :: IORef Int -> Int -> IORef Grid -> IORef GameState -> Element -> UI ()
+clickCell sRef index gridRef stateRef probText = do
     element probText # set UI.text ""
     gameState <- liftIO $ readIORef stateRef
+    s <- liftIO $ readIORef sRef
     case gameState of
         -- when game not yet started
         -- updates game state and resets the grid
@@ -156,8 +157,8 @@ clickCell index gridRef stateRef probText = do
         GameStart numBombs -> do
             (Grid n _ _) <- liftIO $ readIORef gridRef
             liftIO $ writeIORef stateRef $ Playing (n*n - numBombs, numBombs)
-            seed <- liftIO sysTime
-            liftIO $ modifyIORef gridRef $ resetGrid numBombs index seed
+            -- seed <- liftIO sysTime
+            liftIO $ modifyIORef gridRef $ resetGrid numBombs index s
             revealCells index gridRef stateRef
         -- when in game
         -- if hidden cell clicked on, reveal cells
