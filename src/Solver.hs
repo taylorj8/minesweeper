@@ -14,12 +14,10 @@ import Data.List (subsequences, partition, nub, groupBy, sortBy, minimumBy)
 import Data.Function (on)
 import Data.Ord (comparing)
 import Data.Ratio ((%))
-
-import Control.Concurrent ( threadDelay )
-import Control.Parallel.Strategies
-import Data.Maybe (catMaybes)
+import Control.Concurrent (threadDelay)
 
 
+-- figures out next move and performs it if completely safe
 -- return true if a move was performed
 solve :: IORef Grid -> IORef GameState -> IORef Int -> IORef ProbabilityList -> Element -> UI Bool
 solve gridRef stateRef currentRef probRef probText = do
@@ -45,7 +43,6 @@ solve gridRef stateRef currentRef probRef probText = do
                             element probText # set UI.text "Calculating"
                             let probList = getProbablityList grid gameState
                             liftIO $ writeIORef probRef probList
-                            element probText # set UI.text ""
                             case probList of
                                 Uncertain (_, prob) -> do
                                     element probText # set UI.text (show (round (prob*100)) ++ "%")
@@ -53,7 +50,9 @@ solve gridRef stateRef currentRef probRef probText = do
                                 Naive (_, prob) -> do
                                     element probText # set UI.text ("~" ++ (show (round (prob*100)) ++ "%"))
                                     return False
-                                _ -> probSolve gridRef stateRef probRef probText
+                                _ -> do 
+                                    element probText # set UI.text ""
+                                    probSolve gridRef stateRef probRef probText
                     _ -> probSolve gridRef stateRef probRef probText
         _ -> return False
 
@@ -83,7 +82,7 @@ autoSolve gridRef stateRef currentRef probRef (probText, autoButton) = do
         autoSolve' gridRef stateRef currentRef probRef = do
             continue <- solve gridRef stateRef currentRef probRef probText
             if continue then do
-                liftIO $ threadDelay 100
+                liftIO $ threadDelay 1000
                 autoSolve' gridRef stateRef currentRef probRef
             else do
                 element autoButton # set UI.style [("background-color", "lightgrey")]
@@ -160,6 +159,7 @@ getProbablityList grid state = case state of
     Playing (_, bombsRemaining) -> do
         let (frontierCells, frontierNeighbours, numOthers) = getFrontier grid
         let neighbourCells = convertCells frontierNeighbours grid frontierCells
+        -- getPatternGuesses
         if sum (map (choose (length frontierCells)) [1..(min bombsRemaining (length frontierCells))]) > 50000000 
         then Naive $ getNaiveGuess neighbourCells
         else do
@@ -205,9 +205,10 @@ convertCells :: [Cell] -> Grid -> [Int] -> [NeighbourCell]
 convertCells frontierNeighbours grid frontierCells = map convertCell frontierNeighbours
     where
         convertCell (Cell index _ _ (Empty num)) = do
-            let surCells = getNeighbours grid index
+            let neighbourIndexes = findNeighbours index (size grid)
+            let surCells = map (getCell grid) neighbourIndexes
             let newNum = num - length (filter (stateIs Flagged) surCells)
-            let neighbours = filter (`elem` frontierCells) $ findNeighbours index (size grid)
+            let neighbours = filter (`elem` frontierCells) neighbourIndexes
             (newNum, neighbours)
         convertCell _ = (0, [])
 
