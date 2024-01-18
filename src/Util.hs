@@ -88,6 +88,7 @@ squareSize (Grid n _ _) = n*n
 data ProbabilityList
     = Certain [Int]
     | Uncertain (Int, Rational)
+    | Naive (Int, Float)
     | None
     deriving Show
 

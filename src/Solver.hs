@@ -44,11 +44,11 @@ solve gridRef stateRef currentRef probRef probText = do
                             liftIO $ writeIORef probRef probList
                             element probText # set UI.text ""
                             case (probList, tooLarge) of
-                                (_, True) -> do
-                                    element probText # set UI.text "Uncertain"
-                                    return False
-                                (Uncertain (_, prob), False) -> do
+                                (Uncertain (_, prob), _) -> do
                                     element probText # set UI.text (show (round (prob*100)) ++ "%")
+                                    return False
+                                (Naive (_, prob), _) -> do
+                                    element probText # set UI.text ("~" ++ (show (round (prob*100)) ++ "%"))
                                     return False
                                 _ -> probSolve gridRef stateRef probRef probText
                     _ -> probSolve gridRef stateRef probRef probText
@@ -56,18 +56,19 @@ solve gridRef stateRef currentRef probRef probText = do
 
 
 -- handles case of bombs stuck behind row of bombs
-clickRemaining ::  IORef Grid -> IORef GameState -> IORef Int -> Element -> UI ()
+clickRemaining :: IORef Grid -> IORef GameState -> IORef Int -> Element -> UI ()
 clickRemaining gridRef stateRef currentRef probText = do
     cur <- liftIO $ readIORef currentRef
     clickRemaining' cur
-    where 
+    where
         clickRemaining' index = do
             grid <- liftIO $ readIORef gridRef
-            case grid `getCell` index of 
+            let index' = index `mod` squareSize grid
+            case grid `getCell` index of
                 (Cell index _ Hidden _) -> do
-                    liftIO $ writeIORef currentRef (index + 1)
-                    clickCell index gridRef stateRef probText
-                _ -> clickRemaining' (index + 1)
+                    liftIO $ writeIORef currentRef (index' + 1)
+                    clickCell index' gridRef stateRef probText
+                _ -> clickRemaining' (index' + 1)
 
 
 -- repeatedly call solve until no remaining moves
@@ -143,34 +144,49 @@ probSolve gridRef stateRef probRef probText = do
             clickCell safest gridRef stateRef probText
             liftIO $ writeIORef probRef None
             return False
+        Naive (safest, prob) -> do
+            clickCell safest gridRef stateRef probText
+            liftIO $ writeIORef probRef None
+            return False
         _ -> return False
 
 
 getProbablityList :: Grid -> GameState -> UI (ProbabilityList, Bool)
-getProbablityList grid state = do
+getProbablityList grid state =
     case state of
         Playing (_, bombsRemaining) -> do
             let (frontierCells, frontierNeighbours, numOthers) = getFrontier grid
-            let (arrangements, tooLarge) = generateArrangements frontierCells (length frontierCells) bombsRemaining
-            -- liftIO $ print tooLarge
-            liftIO $ print $ length arrangements
             let neighbourCells = convertCells frontierNeighbours grid frontierCells
-            validArrangements <- checkArrangements neighbourCells arrangements
-            liftIO $ print validArrangements
-            temp <- calculateProbabilities validArrangements bombsRemaining numOthers
-            -- liftIO $ print temp
-            liftIO $ print $ toProbList temp
-            return (toProbList temp, tooLarge)
+            if sum (map (choose (length frontierCells)) [1..(min bombsRemaining (length frontierCells))]) > 20000000 then do
+                return (Naive $ getNaiveGuess neighbourCells, True)
+            else do
+                let (arrangements, tooLarge) = generateArrangements frontierCells (length frontierCells) bombsRemaining
+                -- liftIO $ print tooLarge
+                liftIO $ print $ length arrangements
+                validArrangements <- checkArrangements neighbourCells arrangements
+                liftIO $ print validArrangements
+                temp <- calculateProbabilities validArrangements bombsRemaining numOthers
+                -- liftIO $ print temp
+                liftIO $ print $ toProbList temp
+                return (toProbList temp, tooLarge)
         _ -> return (None, False)
 
+
+getNaiveGuess :: [NeighbourCell] -> (Int, Float)
+getNaiveGuess cells = getSafest $ map checkCell cells
+    where
+        checkCell (num, neighbours) = (head neighbours, fromIntegral num / fromIntegral (length neighbours))
+
+
 toProbList :: [(Int, Rational)] -> ProbabilityList
-toProbList probs = do
+toProbList probs =
     case partition ((==1.0) . snd) probs of
         ([], []) -> None
         ([], uncertain) -> Uncertain $ getSafest uncertain
         (bombs, _) -> Certain (map fst bombs)
-    where
-        getSafest list = minimumBy (comparing snd) list
+
+getSafest :: Ord a => [(Int, a)] -> (Int, a)
+getSafest = minimumBy (comparing snd)
 
 
 -- get indices of frontier cells along with number of other hidden cells
@@ -229,13 +245,10 @@ subseq n (x:xs) = [x] : foldr f [] (subseq n xs)
 
 -- take all possible arrangements and filter out invalid arrangements
 checkArrangements :: [NeighbourCell] -> [[Int]] -> UI [[Int]]
-checkArrangements frontierNeighbours arrangements = do
-    -- liftIO $ print $ "Neighbours: " ++ show frontierNeighbours
+checkArrangements frontierNeighbours arrangements =
     return $ filter isValidArrangement arrangements
     where
-        isValidArrangement arrangement = do
-            -- make grid with cells in arrangement flagged and check if valid
-            -- let grid' = toggleFlagged arrangement grid
+        isValidArrangement arrangement =
             all (isValid arrangement) frontierNeighbours
         isValid arrangement cell = case cell of
             (n, neighbours) -> do
