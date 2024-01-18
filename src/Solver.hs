@@ -148,7 +148,7 @@ getProbablityList grid state = do
             temp <- calculateProbabilities validArrangements bombsRemaining (numOthers + (l - length frontierCells))
             let probList = toProbList temp
             liftIO $ print probList
-            liftIO $ print $ id ""
+            liftIO $ print $ id "\n"
             case probList of
                 Certain x -> return (Certain x, True)
                 Uncertain x -> if null rest then return (Uncertain x, True)
@@ -209,14 +209,14 @@ stateIs s c = cellState c == s
 
 
 -- generate all possible arrangements
--- if too many, stop at 10,000,000 - this may cause inaccurate predictions
+-- if too many, stop at 1,000,000 - this may cause inaccurate predictions
 -- first arrangement can be dropped as it's always the empty list
 generateArrangements :: [Int] -> Int -> Int -> ([[Int]], Bool)
-generateArrangements indexes numCells numBombs = (take n $ drop 1 $ subsequences indexes, tooLarge)
+generateArrangements indexes numCells numBombs = (take n (filter (\x -> length x <= min numBombs numCells) $ drop 1 $ subsequences indexes), tooLarge)
     where 
         m = sum $ map (choose numCells) [0..(min numBombs numCells)]
-        n = fromInteger $ min m 10000000
-        tooLarge = m > 10000000
+        n = fromInteger $ min m 1000000
+        tooLarge = m > 1000000
 
 
 -- take all possible arrangements and filter out invalid arrangements
