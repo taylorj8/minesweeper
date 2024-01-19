@@ -12,11 +12,10 @@ cabal-version:       >=1.10
 executable Minesweeper
   hs-source-dirs:      src
   main-is:             Main.hs
-  other-modules:       Minesweeper, Components
+  other-modules:       Minesweeper, Components, Solver, Util
   default-language:    Haskell2010
   build-depends:       base >= 4.7 && < 5
                      , mtl
-                     , containers
                      , threepenny-gui
                      , split
                      , random
