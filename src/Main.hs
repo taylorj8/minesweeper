@@ -15,7 +15,7 @@ import Control.Monad (replicateM, when)
 
 main :: IO ()
 main = do
-    startGUI defaultConfig setup
+    startGUI defaultConfig { jsStatic = Just "static"} setup
 
 
 setup :: Window -> UI ()
@@ -57,7 +57,8 @@ setup window = do
     on UI.click autoButton $ \_ -> autoSolve gridRef stateRef solveRef probRef (probText, autoButton)
     -- bottom row contains solve buttons and probability text
     let bottomRow = UI.row [element solveButton, element probText, element autoButton] # set UI.style [("margin", "auto")]
-
+    
+    getBody window # setBackgroundStyle "cave.png"
     getBody window #+
         [
             UI.div #+ [topRow],
