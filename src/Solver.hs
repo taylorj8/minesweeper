@@ -41,7 +41,7 @@ solve gridRef stateRef currentRef probRef probText = do
                         else do
                             -- if logical move can't be found, calculate probabilistic move
                             element probText # set UI.text "Calculating"
-                            probList <- findProbableMove grid bombsRemaining
+                            let probList = findProbableMove grid bombsRemaining
                             liftIO $ writeIORef probRef probList
                             case probList of
                                 -- if move found is uncertain or naive, show probability but don't take move
@@ -175,17 +175,18 @@ takeProbableMove gridRef stateRef probRef probText = do
 
 
 -- find a probable move
-findProbableMove :: Grid -> Int -> UI ProbableMove
+findProbableMove :: Grid -> Int -> ProbableMove
 findProbableMove grid bombsRemaining = do
+    -- get the frontier cells, their neighbours and the number of remaining hidden cells
     let (frontierCells, frontierNeighbours, numOthers) = getFrontier grid
     let neighbourCells = convertCells frontierNeighbours grid frontierCells
-    -- generate all possible valid arrangements using backtracking
-    let arrangements = findValidArrangements frontierCells bombsRemaining neighbourCells
-    liftIO $ print $ length arrangements
-    -- calculate each cell containing a bomb
-    return $ toProbList $ calculateProbabilities arrangements bombsRemaining numOthers
-    where
-        numPosibilities cells = sum (map (choose (length cells)) [1..(min bombsRemaining (length cells))])
+    -- too many cells, generating all possible arrangments would take too long so make a naive guess
+    if length frontierCells > 32 && bombsRemaining > 12 then Naive $ getNaiveGuess neighbourCells
+    else do
+        -- generate all possible valid arrangements using backtracking
+        let arrangements = findValidArrangements frontierCells bombsRemaining neighbourCells
+        -- calculate each cell containing a bomb
+        toProbList $ calculateProbabilities arrangements bombsRemaining numOthers
 
 
 -- make a guess based on individual cells
@@ -231,40 +232,6 @@ getFrontier grid = do
             any (stateIs Revealed) neighbours
 
 
--- sortFrontier :: [Int] -> Int -> [Int]
--- sortFrontier frontierCells n = concat $ sortOn (Down . length) groupAdjacent
---     -- sort frontier cells by number of neighbours
---     where
---         groupAdjacent = groupBy adjacent frontierCells
---         adjacent c1 c2 = diff == 1 || diff == n where diff = c2 - c1
-
-    -- where
-    --     segmentFrontier :: [Int] -> [[Int]]
-    --     segmentFrontier cells =
-    --         let (segment, remaining) = partition (\cell -> not (any (`areNeighbours` cell) remaining)) cells
-    --         in segment : if null remaining then [] else segmentFrontier remaining
-    --     areNeighbours x y = dist == 1 || dist == n where dist = abs x - y
-    --     sortSegment :: [Int] -> [Int]
-    --     sortSegment cells = ss $ find (endCell cells) cellsryul
-    --     ss x = [2]
-    --     getEndCell cells = case find (endCell cells) cells of
-    --         Just c -> c
-    --         Nothing -> head cells
-    --         where
-    --             endCell others c = let neigbourIndices = [c-1, c+1, c-n, c+n] in
-    --                 length (neigbourIndices `intersect` others) <= 1
-
-
-getDirection :: Int -> Int -> Direction
-getDirection c1 c2
-    | dist == 2 = North
-    | dist == -2 = South
-    | dist == 1 = East
-    | dist == -1 = West
-    | otherwise = Apart
-    where dist = c2 - c1
-
-
 -- convert cells to a different format to more efficiently check for valid arrangements
 -- NeighbourCell countain number of unflagged surrounding bombs and list of indices of neighbouring frontier cells
 convertCells :: [Cell] -> Grid -> [Int] -> [NeighbourCell]
@@ -285,30 +252,6 @@ convertCells frontierNeighbours grid frontierCells = map convertCell frontierNei
 -- return true if cell is in passed state
 stateIs :: CellState -> Cell -> Bool
 stateIs s c = cellState c == s
-
-
--- generate all possible arrangements of bombs using subsequences
--- first arrangement can be dropped as it's always the empty list
--- if number of bombs is less than number of available cells, filter out arrangements too long
-generateArrangements :: [Int] -> Int -> [Arrangement]
-generateArrangements availableCells numBombs
-    | length availableCells <= numBombs = subseqs
-    | otherwise = filter (\s -> length s <= numBombs) subseqs
-    where subseqs = drop 1 $ subsequences availableCells
-
-
--- take all possible arrangements and filter out invalid arrangements
-checkArrangements :: [NeighbourCell] -> [Arrangement] -> [Arrangement]
-checkArrangements frontierNeighbours = filter (isValidArrangement frontierNeighbours)
-
-
--- an arrangement is valid if all the frontier neighbours' rules are followed
-isValidArrangement :: [NeighbourCell] -> Arrangement -> Bool
-isValidArrangement frontierNeighbours arrangement = all (isValid arrangement) frontierNeighbours
-    where
-        isValid arrangement (n, neighbours) = n == length (filter (`elem` arrangement) neighbours)
-        -- count the number of bombs in an arrangement and compare to n
-        -- arrangement is valid according to a given cell if these are equal
 
 
 -- find all possible valid arrangements of bombs
@@ -337,6 +280,7 @@ findValidArrangements availableCells remainingBombs frontierNeighbours = filter 
 -- calculate the probabilities of each cell from the valid arrangements
 -- returns index mapped to probability
 -- Integer and Rational used to avoid overflow
+calculateProbabilities :: [[Int]] -> Int -> Int -> [(Int, Rational)]
 calculateProbabilities arrangements remainingBombs numOthers = do
     -- for each arrangement, get the number of ways to arrange the remaining bombs
     let counts = map (ch . length) arrangements
