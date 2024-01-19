@@ -116,16 +116,15 @@ revealIndexes grid index = revealIndexes' grid [index] [index]
 
 
 -- set cellState to Flagged if Hidden and vice versa for indices given
-toggleFlagged :: [Int] -> Grid -> Grid
-toggleFlagged indexes (Grid n c cells) = do
-    let updatedCells = map (toggle . getCell) indexes
-    Grid n c (cells V.// (zip indexes updatedCells))
+toggleFlagged :: Int -> Grid -> Grid
+toggleFlagged index (Grid n c cells) = Grid n c (cells V.// [(index, toggle index)])
     where
         getCell i = cells V.! i
-        toggle cell = case cellState cell of
-            Hidden -> cell { cellState = Flagged }
-            Flagged -> cell { cellState = Hidden }
-            Revealed -> cell
+        toggle i = let cell = cells V.! i in
+            case cellState cell of
+                Hidden -> cell { cellState = Flagged }
+                Flagged -> cell { cellState = Hidden }
+                Revealed -> cell
 
 
 -- sets cell state of cells at given indexes to Revealed
@@ -240,7 +239,7 @@ flagCell index gridRef stateRef probText = do
             grid <- liftIO $ readIORef gridRef
             let cell = cells grid V.! index
             -- internally toggle the cell's flag
-            liftIO $ writeIORef gridRef $ toggleFlagged [index] grid
+            liftIO $ writeIORef gridRef $ toggleFlagged index grid
             case cellState cell of
                 -- update the UI and update the flag count
                 Hidden -> do

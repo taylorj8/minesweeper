@@ -79,12 +79,14 @@ instance Show Grid where
 getCell :: Grid -> Int -> Cell
 getCell (Grid _ _ cells) index = cells V.! index
 
-squareSize :: Grid -> Int
-squareSize (Grid n _ _) = n*n
+-- total number of cells in the grid
+totalSize :: Grid -> Int
+totalSize (Grid n _ _) = n*n
 
  -- either contains or unsafe options
  -- Certain has list of guaranteed bombs to flag
- -- Uncertain contains cell with lowest probability of a bomb
+ -- Uncertain and Naive contain cell with lowest probability of a bomb
+ -- Naive may be inaccurate
 data ProbabilityList
     = Certain [Int]
     | Uncertain (Int, Rational)
@@ -92,4 +94,5 @@ data ProbabilityList
     | None
     deriving Show
 
+-- contains number of unflagged bombs and list of neighbouring frontier cells
 type NeighbourCell = (Int, [Int])

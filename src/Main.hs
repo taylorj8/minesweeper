@@ -24,7 +24,7 @@ setup window = do
     -- stops context menu appearing when attempting to place flags
     runFunction $ ffi "window.oncontextmenu = function() { return false; }"
 
-    -- board parameters
+    -- grid parameters
     let size = 16
     let numBombs = 40
 
@@ -41,7 +41,7 @@ setup window = do
     stateRef <- liftIO $ newIORef $ GameStart numBombs
     setOnClick gridRef stateRef probText
 
-    -- set up refs for solver
+    -- set up IORefs for solver
     probRef <- liftIO $ newIORef None
     solveRef <- liftIO $ newIORef 0
 
@@ -55,7 +55,7 @@ setup window = do
     autoButton <- makeSolveButton "Auto Play"
     on UI.click solveButton $ \_ -> solve gridRef stateRef solveRef probRef probText
     on UI.click autoButton $ \_ -> autoSolve gridRef stateRef solveRef probRef (probText, autoButton)
-
+    -- bottom row contains solve buttons and probability text
     let bottomRow = UI.row [element solveButton, element probText, element autoButton] # set UI.style [("margin", "auto")]
 
     getBody window #+

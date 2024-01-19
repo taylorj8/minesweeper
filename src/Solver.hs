@@ -74,7 +74,7 @@ clickRemaining gridRef stateRef currentRef probText = do
     where
         clickRemaining' index = do
             grid <- liftIO $ readIORef gridRef
-            let index' = index `mod` squareSize grid
+            let index' = index `mod` totalSize grid
             case cellState (grid `getCell` index') of
                 Hidden -> do
                     liftIO $ writeIORef currentRef (index' + 1)
@@ -120,10 +120,10 @@ logicSolve gridRef stateRef currentRef probText = do
     where
         solveFlags' grid cur iterations = do
             -- mod keeps index inside grid
-            let current = cur `mod` squareSize grid
+            let current = cur `mod` totalSize grid
             let cell = grid `getCell` current
             -- if no move found after checking every cell, return
-            if iterations > squareSize grid then return False
+            if iterations > totalSize grid then return False
             else case cell of
                 -- if 0 cell or unrevealed, try next cell
                 (Cell _ _ Revealed (Empty 0)) -> solveFlags' grid (current+1) (iterations+1)
