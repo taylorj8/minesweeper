@@ -260,7 +260,7 @@ flagCell index gridRef stateRef probText = do
 
 
 -- restarts the game
-handleRestart :: IORef Grid -> IORef GameState -> IORef Int -> IORef ProbabilityList -> Element -> Int -> UI ()
+handleRestart :: IORef Grid -> IORef GameState -> IORef Int -> IORef ProbableMove -> Element -> Int -> UI ()
 handleRestart gridRef stateRef solveRef probRef probText numBombs = do
     Grid _ top cells <- liftIO $ readIORef gridRef
     resetTopBar top  -- reset title and flag count

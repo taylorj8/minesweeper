@@ -36,14 +36,14 @@ setup window = do
     squares <- replicateM (size*size) uiCell
     gridRef <- liftIO $ newIORef $ emptyGrid size (title, bombCounter) squares
 
-    -- initialise state and set onclick functions for the cells
-    probText <- makeProbText
-    stateRef <- liftIO $ newIORef $ GameStart numBombs
-    setOnClick gridRef stateRef probText
-
     -- set up IORefs for solver
     probRef <- liftIO $ newIORef None
     solveRef <- liftIO $ newIORef 0
+
+    -- initialise state and set onclick functions for the cells
+    probText <- makeProbText
+    stateRef <- liftIO $ newIORef $ GameStart numBombs
+    setOnClick gridRef stateRef probRef probText
 
     -- set up restart button and arrange in a row
     restartButton <- topCell "↺"
@@ -70,11 +70,16 @@ setup window = do
 
 -- set up click handlers for each cell
 -- left click to reveal cell, right click to place flag
-setOnClick :: IORef Grid -> IORef GameState -> Element -> UI ()
-setOnClick gridRef stateRef probText = do
+setOnClick :: IORef Grid -> IORef GameState -> IORef ProbableMove -> Element -> UI ()
+setOnClick gridRef stateRef probRef probText = do
     (Grid _ _ cells) <- liftIO $ readIORef gridRef
     mapM_ (clickHandlers gridRef) cells
         where
             clickHandlers gridRef (Cell i square state _) = do
-                on UI.click square $ \_ -> clickCell i gridRef stateRef probText
-                on UI.contextmenu square $ \_ -> flagCell i gridRef stateRef probText
+                -- if player updates the grid, probable move needs recalculated
+                on UI.click square $ \_ -> do 
+                    liftIO $ writeIORef probRef None
+                    clickCell i gridRef stateRef probText
+                on UI.contextmenu square $ \_ -> do 
+                    liftIO $ writeIORef probRef None
+                    flagCell i gridRef stateRef probText

@@ -87,7 +87,7 @@ totalSize (Grid n _ _) = n*n
  -- Certain has list of guaranteed bombs to flag
  -- Uncertain and Naive contain cell with lowest probability of a bomb
  -- Naive may be inaccurate
-data ProbabilityList
+data ProbableMove
     = Certain [Int]
     | Uncertain (Int, Rational)
     | Naive (Int, Float)

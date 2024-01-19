@@ -17,7 +17,7 @@ import Control.Concurrent (threadDelay)
 
 -- figures out next move and performs it if completely safe
 -- return true if a move was performed
-solve :: IORef Grid -> IORef GameState -> IORef Int -> IORef ProbabilityList -> Element -> UI Bool
+solve :: IORef Grid -> IORef GameState -> IORef Int -> IORef ProbableMove -> Element -> UI Bool
 solve gridRef stateRef currentRef probRef probText = do
     gameState <- liftIO $ readIORef stateRef
     grid <- liftIO $ readIORef gridRef
@@ -83,7 +83,7 @@ clickRemaining gridRef stateRef currentRef probText = do
 
 
 -- repeatedly call solve until no remaining moves
-autoSolve :: IORef Grid -> IORef GameState -> IORef Int -> IORef ProbabilityList -> (Element, Element) -> UI ()
+autoSolve :: IORef Grid -> IORef GameState -> IORef Int -> IORef ProbableMove -> (Element, Element) -> UI ()
 autoSolve gridRef stateRef currentRef probRef (probText, autoButton) = do
     -- highlight button while auto solver running
     element autoButton # set UI.style [("background-color", "LightGoldenRodYellow")]
@@ -91,10 +91,10 @@ autoSolve gridRef stateRef currentRef probRef (probText, autoButton) = do
     where
         autoSolve' gridRef stateRef currentRef probRef = do
             -- repeat unless false returned, i.e. move not taken
-            -- allows user to choose whether to take chance
+            -- allows player to choose whether to take chance
             continue <- solve gridRef stateRef currentRef probRef probText
             if continue then do
-                liftIO $ threadDelay 10000  -- delay for dramatic effect
+                liftIO $ threadDelay 100000  -- delay for dramatic effect
                 autoSolve' gridRef stateRef currentRef probRef
             else do
                 -- unhighlight button to show stop
@@ -150,7 +150,7 @@ logicSolve gridRef stateRef currentRef probText = do
 
 -- check the probability list and perform the move inside
 -- could be a safe or unsafe move
-takeProbableMove :: IORef Grid -> IORef GameState -> IORef ProbabilityList -> Element -> UI Bool
+takeProbableMove :: IORef Grid -> IORef GameState -> IORef ProbableMove -> Element -> UI Bool
 takeProbableMove gridRef stateRef probRef probText = do
     probList <- liftIO $ readIORef probRef
     case probList of
@@ -175,7 +175,7 @@ takeProbableMove gridRef stateRef probRef probText = do
 
 
 -- find a probable move
-findProbableMove :: Grid -> Int -> ProbabilityList
+findProbableMove :: Grid -> Int -> ProbableMove
 findProbableMove grid bombsRemaining = do
     let (frontierCells, frontierNeighbours, numOthers) = getFrontier grid
     let neighbourCells = convertCells frontierNeighbours grid frontierCells
@@ -202,7 +202,7 @@ getNaiveGuess cells = getSafest $ map checkCell cells
 
 -- takes in list of indexes to probabilities
 -- partition out the guaranteed bombs
-toProbList :: [(Int, Rational)] -> ProbabilityList
+toProbList :: [(Int, Rational)] -> ProbableMove
 toProbList probs = case partition ((==1.0) . snd) probs of
         ([], []) -> None
         -- if no guaranteed bomb, choose the index with the lowest probability
