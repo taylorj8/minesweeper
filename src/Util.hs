@@ -98,3 +98,11 @@ type NeighbourCell = (Int, [Int])
 
 -- possible arrangement of bombs
 type Arrangement = [Int]
+
+data Direction 
+    = North
+    | East
+    | South
+    | West
+    | Apart
+    deriving (Eq, Ord, Enum)

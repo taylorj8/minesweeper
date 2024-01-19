@@ -8,9 +8,9 @@ import Graphics.UI.Threepenny.Core hiding (on)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef, modifyIORef)
 import qualified Data.Vector as V
 import Control.Monad (forever, unless, when, filterM)
-import Data.List (subsequences, partition, nub, groupBy, sortBy, minimumBy)
+import Data.List (subsequences, partition, nub, groupBy, sortBy, minimumBy, sortOn, intersect, find)
 import Data.Function (on)
-import Data.Ord (comparing)
+import Data.Ord (comparing, Down (Down))
 import Data.Ratio ((%))
 import Control.Concurrent (threadDelay)
 
@@ -179,18 +179,11 @@ findProbableMove :: Grid -> Int -> UI ProbableMove
 findProbableMove grid bombsRemaining = do
     let (frontierCells, frontierNeighbours, numOthers) = getFrontier grid
     let neighbourCells = convertCells frontierNeighbours grid frontierCells
-    -- if too many posibilities, make a naive guess instead
-    if numPosibilities frontierCells > 500000000000 then return $ Naive $ getNaiveGuess neighbourCells
-    else do
-        -- generate all possible arrangements of bombs in the remaining cells
-        let arrangements = generateArrangements frontierCells bombsRemaining
-        -- filter out arrangements that break the logic rules
-        -- let validArrangements = checkArrangements neighbourCells arrangements
-        let test = findValidArrangements frontierCells bombsRemaining neighbourCells
-        -- liftIO $ print $ length validArrangements
-        liftIO $ print $ length test
-        -- calculate each cell containing a bomb
-        return $ toProbList $ calculateProbabilities test bombsRemaining numOthers
+    -- generate all possible valid arrangements using backtracking
+    let arrangements = findValidArrangements frontierCells bombsRemaining neighbourCells
+    liftIO $ print $ length arrangements
+    -- calculate each cell containing a bomb
+    return $ toProbList $ calculateProbabilities arrangements bombsRemaining numOthers
     where
         numPosibilities cells = sum (map (choose (length cells)) [1..(min bombsRemaining (length cells))])
 
@@ -236,6 +229,40 @@ getFrontier grid = do
             -- get neighbours of a cell and return true if any are revealed
             let neighbours = getNeighbours grid index
             any (stateIs Revealed) neighbours
+
+
+-- sortFrontier :: [Int] -> Int -> [Int]
+-- sortFrontier frontierCells n = concat $ sortOn (Down . length) groupAdjacent
+--     -- sort frontier cells by number of neighbours
+--     where
+--         groupAdjacent = groupBy adjacent frontierCells
+--         adjacent c1 c2 = diff == 1 || diff == n where diff = c2 - c1
+
+    -- where
+    --     segmentFrontier :: [Int] -> [[Int]]
+    --     segmentFrontier cells =
+    --         let (segment, remaining) = partition (\cell -> not (any (`areNeighbours` cell) remaining)) cells
+    --         in segment : if null remaining then [] else segmentFrontier remaining
+    --     areNeighbours x y = dist == 1 || dist == n where dist = abs x - y
+    --     sortSegment :: [Int] -> [Int]
+    --     sortSegment cells = ss $ find (endCell cells) cellsryul
+    --     ss x = [2]
+    --     getEndCell cells = case find (endCell cells) cells of
+    --         Just c -> c
+    --         Nothing -> head cells
+    --         where
+    --             endCell others c = let neigbourIndices = [c-1, c+1, c-n, c+n] in
+    --                 length (neigbourIndices `intersect` others) <= 1
+
+
+getDirection :: Int -> Int -> Direction
+getDirection c1 c2
+    | dist == 2 = North
+    | dist == -2 = South
+    | dist == 1 = East
+    | dist == -1 = West
+    | otherwise = Apart
+    where dist = c2 - c1
 
 
 -- convert cells to a different format to more efficiently check for valid arrangements
