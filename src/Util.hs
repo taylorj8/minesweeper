@@ -1,7 +1,6 @@
 module Util where
 
 import qualified Data.Vector as V
-import qualified Graphics.UI.Threepenny as UI
 import Graphics.UI.Threepenny.Core (Element)
 
 -- tracks the state of the game
@@ -96,3 +95,6 @@ data ProbableMove
 
 -- contains number of unflagged bombs and list of neighbouring frontier cells
 type NeighbourCell = (Int, [Int])
+
+-- possible arrangement of bombs
+type Arrangement = [Int]
