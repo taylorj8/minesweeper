@@ -53,13 +53,15 @@ solve gridRef stateRef currentRef probRef probText = do
                                     element probText # set UI.text ("~" ++ (show (round (prob*100)) ++ "%"))
                                     return False
                                 -- otherwise make move
-                                Certain guaranteedCells -> do 
+                                Certain guaranteedCells -> do
                                     element probText # set UI.text ""
                                     takeCertainMove gridRef stateRef probRef probText guaranteedCells
-                                _ -> return False
+                                _ -> do 
+                                    element probText # set UI.text "None"
+                                    return False
                     -- uncertain/naive moves from last turn are taken here
                     -- also certain moves if more than one found
-                    _ -> takeProbableMove gridRef stateRef probRef probText
+                    _ -> takeProbableMove gridRef stateRef probRef currentRef probText
         _ -> return False
 
 
@@ -147,8 +149,8 @@ logicSolve gridRef stateRef currentRef probText = do
 
 -- check the probability list and perform the move inside
 -- could be a safe or unsafe move
-takeProbableMove :: IORef Grid -> IORef GameState -> IORef ProbableMove -> Element -> UI Bool
-takeProbableMove gridRef stateRef probRef probText = do
+takeProbableMove :: IORef Grid -> IORef GameState -> IORef ProbableMove -> IORef Int -> Element -> UI Bool
+takeProbableMove gridRef stateRef probRef currentRef probText = do
     probList <- liftIO $ readIORef probRef
     case probList of
         -- contains list of guaranteed bombs and safe cells
@@ -156,7 +158,9 @@ takeProbableMove gridRef stateRef probRef probText = do
         -- both below contain the safest cell found from unsafe options
         -- click it and update IORef
         Uncertain (safest, prob) -> do
-            clickCell safest gridRef stateRef probText
+            -- safest is -1 if there was no frontier, i.e. no information about remaining cells
+            if safest == -1 then clickRemaining gridRef stateRef currentRef probText
+            else clickCell safest gridRef stateRef probText
             liftIO $ writeIORef probRef None
             return True
         Naive (safest, prob) -> do
@@ -186,15 +190,20 @@ findProbableMove :: Grid -> Int -> IO ProbableMove
 findProbableMove grid bombsRemaining = do
     -- get the frontier cells, their neighbours and the number of remaining hidden cells
     let (frontierCells, frontierNeighbours, numOthers) = getFrontier grid
-    let neighbourCells = convertCells frontierNeighbours grid frontierCells
-    -- too many cells, generating all possible arrangments would take too long so make a naive guess
-    print $ length frontierCells
-    if length frontierCells > 92 && bombsRemaining > 12 then return $ Naive $ getNaiveGuess neighbourCells
+    -- if no frontier cells then no information about any cells
+    -- in this case probability is just remaining bombs / remaining cells
+    -- -1 tells solver to click first cell
+    if null frontierCells then return $ Uncertain (-1, toInteger bombsRemaining % toInteger numOthers)
     else do
-        -- generate all possible valid arrangements using backtracking
-        arrangements <- findValidArrangements frontierCells bombsRemaining neighbourCells
-        -- calculate each cell containing a bomb
-        return $ toProbList frontierCells $ calculateProbabilities arrangements bombsRemaining numOthers
+        let neighbourCells = convertCells frontierNeighbours grid frontierCells
+        -- too many cells, generating all possible arrangments would take too long so make a naive guess
+        print $ length frontierCells
+        if length frontierCells > 35 && bombsRemaining > 15 then return $ Naive $ getNaiveGuess neighbourCells
+        else do
+            -- generate all possible valid arrangements using backtracking
+            arrangements <- findValidArrangements frontierCells bombsRemaining neighbourCells
+            -- calculate probability of each cell containing a bomb
+            return $ toProbList frontierCells $ calculateProbabilities arrangements bombsRemaining numOthers
 
 
 -- make a guess based on individual cells
@@ -283,7 +292,7 @@ findValidArrangements availableCells remainingBombs frontierNeighbours = do
             | isValidSubArrangement currentArrangement = do
                 r1 <- findValidArrs rest (remainingBombs-1) (current : currentArrangement) 0
                 r2 <- findValidArrs rest remainingBombs currentArrangement 0
-                return (r1 ++ r2) 
+                return (r1 ++ r2)
             | otherwise = return [tail currentArrangement]
         -- for the first 8 recursions, spawn new threads
         -- deeper once deeper than that, overhead of spawning thread greater than benefit
@@ -295,11 +304,11 @@ findValidArrangements availableCells remainingBombs frontierNeighbours = do
                 forkIO $ do
                     res <- findValidArrs rest (remainingBombs-1) (current : currentArrangement) (remainingThreads-1)
                     putMVar resInclude res
-                
+
                 forkIO $ do
                     res <- findValidArrs rest remainingBombs currentArrangement (remainingThreads-1)
                     putMVar resExclude res
-                
+
                 r1 <- takeMVar resInclude
                 r2 <- takeMVar resExclude
                 return (r1 ++ r2)
