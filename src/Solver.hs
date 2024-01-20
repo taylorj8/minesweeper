@@ -5,12 +5,11 @@ import Minesweeper
 
 import qualified Graphics.UI.Threepenny as UI
 import Graphics.UI.Threepenny.Core hiding (on)
-import Data.IORef (IORef, newIORef, readIORef, writeIORef, modifyIORef)
+import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import qualified Data.Vector as V
-import Control.Monad (forever, unless, when, filterM)
-import Data.List (subsequences, partition, nub, groupBy, sortBy, minimumBy)
+import Data.List (partition, nub, groupBy, sortBy, minimumBy)
 import Data.Function (on)
-import Data.Ord (comparing)
+import Data.Ord (comparing, Down (Down))
 import Data.Ratio ((%))
 import Control.Concurrent (threadDelay)
 
@@ -94,7 +93,7 @@ autoSolve gridRef stateRef currentRef probRef (probText, autoButton) = do
             -- allows player to choose whether to take chance
             continue <- solve gridRef stateRef currentRef probRef probText
             if continue then do
-                liftIO $ threadDelay 100000  -- delay for dramatic effect
+                liftIO $ threadDelay 75000  -- delay for dramatic effect
                 autoSolve' gridRef stateRef currentRef probRef
             else do
                 -- unhighlight button to show stop
@@ -177,19 +176,16 @@ takeProbableMove gridRef stateRef probRef probText = do
 -- find a probable move
 findProbableMove :: Grid -> Int -> ProbableMove
 findProbableMove grid bombsRemaining = do
+    -- get the frontier cells, their neighbours and the number of remaining hidden cells
     let (frontierCells, frontierNeighbours, numOthers) = getFrontier grid
     let neighbourCells = convertCells frontierNeighbours grid frontierCells
-    -- if too many posibilities, make a naive guess instead
-    if numPosibilities frontierCells > 50000000 then Naive $ getNaiveGuess neighbourCells
+    -- too many cells, generating all possible arrangments would take too long so make a naive guess
+    if length frontierCells > 32 && bombsRemaining > 12 then Naive $ getNaiveGuess neighbourCells
     else do
-        -- generate all possible arrangements of bombs in the remaining cells
-        let arrangements = generateArrangements frontierCells bombsRemaining
-        -- filter out arrangements that break the logic rules
-        let validArrangements = checkArrangements neighbourCells arrangements
+        -- generate all possible valid arrangements using backtracking
+        let arrangements = findValidArrangements frontierCells bombsRemaining neighbourCells
         -- calculate each cell containing a bomb
-        toProbList $ calculateProbabilities validArrangements bombsRemaining numOthers
-    where
-        numPosibilities cells = sum (map (choose (length cells)) [1..(min bombsRemaining (length cells))])
+        toProbList $ calculateProbabilities arrangements bombsRemaining numOthers
 
 
 -- make a guess based on individual cells
@@ -257,26 +253,28 @@ stateIs :: CellState -> Cell -> Bool
 stateIs s c = cellState c == s
 
 
--- generate all possible arrangements of bombs using subsequences
--- first arrangement can be dropped as it's always the empty list
--- if number of bombs is less than number of available cells, filter out arrangements too long
-generateArrangements :: [Int] -> Int -> [[Int]]
-generateArrangements availableCells numBombs
-    | length availableCells <= numBombs = subseqs
-    | otherwise = filter (\s -> length s <= numBombs) subseqs
-    where subseqs = drop 1 $ subsequences availableCells
-
-
--- take all possible arrangements and filter out invalid arrangements
-checkArrangements :: [NeighbourCell] -> [[Int]] -> [[Int]]
-checkArrangements frontierNeighbours = filter isValidArrangement
+-- find all possible valid arrangements of bombs
+-- uses backtracking to stop generating possibilities that contain an invalid subarrangement
+-- result doesn't check that too few bombs have been placed, so filter out these cases
+findValidArrangements :: [Int] -> Int -> [NeighbourCell] -> [Arrangement]
+findValidArrangements availableCells remainingBombs frontierNeighbours = filter isValidArrangement $ findValidArrs availableCells remainingBombs []
     where
-        -- an arrangement is valid if all the frontier neighbours' rules are followed
-        isValidArrangement arrangement = all (isValid arrangement) frontierNeighbours
-        -- count the number of bombs in an arrangement and compare to n
-        -- arrangement is valid according to a given cell if these are equal
-        isValid arrangement (n, neighbours) = n == length (filter (`elem` arrangement) neighbours)
-                
+        findValidArrs :: [Int] -> Int -> Arrangement -> [Arrangement]
+        findValidArrs [] _ currentArrangement = [currentArrangement]  -- stop when out of cells
+        findValidArrs _ 0 currentArrangement = [currentArrangement]   -- stop when out of bombs
+        -- for each available cell, it can either be included or excluded
+        -- recursively find all other arrangements in each case and combine results
+        findValidArrs (current : rest) remainingBombs currentArrangement
+            | isValidSubArrangement currentArrangement =
+                findValidArrs rest (remainingBombs-1) (current : currentArrangement) ++ findValidArrs rest remainingBombs currentArrangement
+            | otherwise = [tail currentArrangement]
+        -- count the number of bombs in an arrangement and compare to n of each cell
+        -- a subarrangement is valid if too many bombs aren't placed beside any neighbour cell
+        -- a whole arrangment is valid if the exact right number of bombs are placed by all neighbour cells
+        isValidSubArrangement arrangement = all (isValid (>=) arrangement) frontierNeighbours
+        isValidArrangement arrangement = all (isValid (==) arrangement) frontierNeighbours
+        isValid c arrangement (n, neighbours) = n `c` length (filter (`elem` arrangement) neighbours)
+
 
 -- calculate the probabilities of each cell from the valid arrangements
 -- returns index mapped to probability

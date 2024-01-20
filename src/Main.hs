@@ -9,7 +9,7 @@ import qualified Graphics.UI.Threepenny as UI
 import Graphics.UI.Threepenny.Core as C
 
 import qualified Data.Vector as V
-import Data.IORef (IORef, newIORef, readIORef, writeIORef, modifyIORef)
+import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Control.Monad (replicateM, when)
 
 
