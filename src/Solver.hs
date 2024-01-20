@@ -5,10 +5,9 @@ import Minesweeper
 
 import qualified Graphics.UI.Threepenny as UI
 import Graphics.UI.Threepenny.Core hiding (on)
-import Data.IORef (IORef, newIORef, readIORef, writeIORef, modifyIORef)
+import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import qualified Data.Vector as V
-import Control.Monad (forever, unless, when, filterM)
-import Data.List (subsequences, partition, nub, groupBy, sortBy, minimumBy, sortOn, intersect, find)
+import Data.List (partition, nub, groupBy, sortBy, minimumBy)
 import Data.Function (on)
 import Data.Ord (comparing, Down (Down))
 import Data.Ratio ((%))
@@ -94,7 +93,7 @@ autoSolve gridRef stateRef currentRef probRef (probText, autoButton) = do
             -- allows player to choose whether to take chance
             continue <- solve gridRef stateRef currentRef probRef probText
             if continue then do
-                -- liftIO $ threadDelay 100000  -- delay for dramatic effect
+                liftIO $ threadDelay 75000  -- delay for dramatic effect
                 autoSolve' gridRef stateRef currentRef probRef
             else do
                 -- unhighlight button to show stop
