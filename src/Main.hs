@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# HLINT ignore "Use forM_" #-}
 module Main where
 
 import Minesweeper
@@ -11,6 +13,8 @@ import Graphics.UI.Threepenny.Core as C
 import qualified Data.Vector as V
 import Data.IORef (IORef, newIORef, readIORef, writeIORef, modifyIORef)
 import Control.Monad (replicateM, when)
+import Control.Concurrent
+import Data.Maybe (maybe)
 
 
 main :: IO ()
@@ -24,7 +28,7 @@ setup window = do
     -- stops context menu appearing when attempting to place flags
     runFunction $ ffi "window.oncontextmenu = function() { return false; }"
 
-    -- grid parameters
+    -- initial grid parameters
     let size = 16
     let numBombs = 40
 
@@ -45,10 +49,6 @@ setup window = do
     stateRef <- liftIO $ newIORef $ GameStart numBombs
     setOnClick gridRef stateRef probRef probText
 
-    -- set up restart button and arrange in a row
-    restartButton <- topCell "↺"
-    on UI.click restartButton $ \_ -> handleRestart gridRef stateRef solveRef probRef probText numBombs
-    let topRow = UI.row [element bombCounter, element title, element restartButton] # set UI.style [("margin", "auto")]
 
     -- set up solve buttons
     solveButton <- makeSolveButton "Play Move"
@@ -56,18 +56,31 @@ setup window = do
     on UI.click solveButton $ \_ -> solve gridRef stateRef solveRef probRef probText
     on UI.click autoButton $ \_ -> autoSolve gridRef stateRef solveRef probRef (probText, autoButton)
     -- bottom row contains solve buttons and probability text
-    let bottomRow = UI.row [element solveButton, element probText, element autoButton] # set UI.style [("margin", "auto")]
-    
-    getBody window # setBackgroundStyle "cave.png"
-    getBody window #+
-        [
-            UI.div #+ [topRow],
-            displayGrid squares size,
-            UI.div #+ [bottomRow]
-        ]
-        
-    return ()
+    bottomRow <- UI.row [element solveButton, element probText, element autoButton] # set UI.style [("margin", "auto")]
 
+    uiGrid <- displayGrid squares size
+    gridContainer <- UI.div #+ [element uiGrid]
+    difficultyRef <- liftIO $ newIORef $ Medium (16, 40)
+    difficultyButton <- makeSolveButton "Medium"
+
+    -- set up restart button and arrange in a row
+    restartButton <- topCell "↺"
+    on UI.click restartButton $ \_ -> handleRestart gridRef stateRef solveRef probRef difficultyRef probText
+
+    on UI.click difficultyButton $ \_ -> changeDifficulty stateRef difficultyRef difficultyButton window gridContainer gridRef probRef probText bombCounter
+    topRow <- UI.row [element bombCounter, element difficultyButton, element restartButton] # set UI.style [("margin", "auto")]
+
+    let body = getBody window
+    body # setBackgroundStyle "cave.png"
+    body #+
+        [
+            UI.div #+ [element title],
+            UI.div #+ [element topRow],
+            element gridContainer,
+            UI.div #+ [element bottomRow]
+        ]
+
+    return ()
 
 -- set up click handlers for each cell
 -- left click to reveal cell, right click to place flag
@@ -78,9 +91,63 @@ setOnClick gridRef stateRef probRef probText = do
         where
             clickHandlers gridRef (Cell i square state _) = do
                 -- if player updates the grid, probable move needs recalculated
-                on UI.click square $ \_ -> do 
+                on UI.click square $ \_ -> do
                     liftIO $ writeIORef probRef None
                     clickCell i gridRef stateRef probText
-                on UI.contextmenu square $ \_ -> do 
+                on UI.contextmenu square $ \_ -> do
                     liftIO $ writeIORef probRef None
                     flagCell i gridRef stateRef probText
+
+
+changeDifficulty :: IORef GameState -> IORef Difficulty -> Element -> Window -> Element -> IORef Grid -> IORef ProbableMove -> Element -> Element -> UI ()
+changeDifficulty stateRef difficultyRef difficultyButton window gridContainer gridRef probRef probText bombCounter = do
+    gameState <- liftIO $ readIORef stateRef
+    case gameState of
+        GameStart _ -> do
+            difficulty <- liftIO $ readIORef difficultyRef
+            let newDifficulty = change difficulty
+            element difficultyButton # set UI.text (show newDifficulty)
+            liftIO $ print newDifficulty
+            liftIO $ writeIORef difficultyRef newDifficulty
+
+            let (size, numBombs) = getParams newDifficulty
+            element bombCounter # set UI.text (show numBombs)
+            liftIO $ modifyIORef stateRef (updateState numBombs)
+
+            liftIO $ print size
+
+            deleteGrid
+            squares <- replicateM (size*size) uiCell
+            newUiGrid <- displayGrid squares size
+
+            liftIO $ modifyIORef gridRef (updateGrid size squares)
+            setOnClick gridRef stateRef probRef probText
+            element gridContainer #+ [element newUiGrid]
+            return ()
+
+            where
+                change difficulty = case difficulty of
+                    Easy _ -> Medium (16, 40)
+                    Medium _ -> Hard (22, 99)
+                    Hard _ -> Easy (9, 10)
+                deleteGrid = do
+                    uiGrid <- getElementById window "0"
+                    case uiGrid of
+                        Just g -> delete g
+                        Nothing -> return ()
+        _ -> return ()
+
+
+updateGrid :: Int -> [Element] -> Grid -> Grid
+updateGrid size squares grid = do
+    let newCells = V.fromList $ zipWith (curry updateSquare) squares [0..]
+    grid { size = size, cells = newCells }
+    where
+        updateSquare (square, index) = Cell index square Hidden (Empty 0)
+
+
+updateState :: Int -> GameState -> GameState
+updateState numBombs gameState = do
+    case gameState of
+        GameStart _ -> GameStart numBombs
+        _ -> gameState

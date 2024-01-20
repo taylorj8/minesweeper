@@ -99,10 +99,17 @@ type NeighbourCell = (Int, [Int])
 -- possible arrangement of bombs
 type Arrangement = [Int]
 
-data Direction 
-    = North
-    | East
-    | South
-    | West
-    | Apart
-    deriving (Eq, Ord, Enum)
+data Difficulty
+    = Easy (Int, Int)
+    | Medium (Int, Int)
+    | Hard (Int, Int)
+
+instance Show Difficulty where
+    show (Easy _) = "Easy"
+    show (Medium _) = "Medium"
+    show (Hard _) = "Hard"
+
+getParams :: Difficulty -> (Int, Int)
+getParams (Easy params) = params
+getParams (Medium params) = params
+getParams (Hard params) = params

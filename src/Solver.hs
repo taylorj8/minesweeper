@@ -94,7 +94,7 @@ autoSolve gridRef stateRef currentRef probRef (probText, autoButton) = do
             -- allows player to choose whether to take chance
             continue <- solve gridRef stateRef currentRef probRef probText
             if continue then do
-                -- liftIO $ threadDelay 100000  -- delay for dramatic effect
+                liftIO $ threadDelay 100000  -- delay for dramatic effect
                 autoSolve' gridRef stateRef currentRef probRef
             else do
                 -- unhighlight button to show stop
