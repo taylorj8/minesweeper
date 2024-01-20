@@ -28,7 +28,7 @@ randSelect n numBombs firstCell seed = take numBombs . nub . filter (`notElem` s
 sysTime :: IO Int
 sysTime = do
     time <- getCurrentTime
-    return $ floor . nominalDiffTimeToSeconds . utcTimeToPOSIXSeconds $ time
+    return $ floor $ (*10) $ nominalDiffTimeToSeconds . utcTimeToPOSIXSeconds $ time
 
 
 -- place bombs at the given indices
@@ -105,16 +105,6 @@ revealIndexes grid index = revealIndexes' grid [index] [index]
             otherwise -> revealIndexes' grid indexes rest
 
 
-
--- toggleFlagged :: Int -> Grid -> Grid
--- toggleFlagged index (Grid n c cells) = do
---     let cell = cells V.! index
---     case cellState cell of
---         Hidden -> Grid n c (cells V.// [(index, cell { cellState = Flagged })])
---         Flagged -> Grid n c (cells V.// [(index, cell { cellState = Hidden })])
---         Revealed -> Grid n c cells
-
-
 -- set cellState to Flagged if Hidden and vice versa for indices given
 toggleFlagged :: Int -> Grid -> Grid
 toggleFlagged index (Grid n c cells) = Grid n c (cells V.// [(index, toggle index)])
@@ -156,9 +146,9 @@ clickCell index gridRef stateRef probText = do
             (Grid n _ _) <- liftIO $ readIORef gridRef
             liftIO $ writeIORef stateRef $ Playing (n*n - numBombs, numBombs)
             seed <- liftIO sysTime
-            -- liftIO $ print seed
-            -- hard seed: 1705754070
-            liftIO $ modifyIORef gridRef $ resetGrid numBombs index 1705754070
+            liftIO $ print seed
+            -- hard seed: 1705754070, 17057637450
+            liftIO $ modifyIORef gridRef $ resetGrid numBombs index 17057637450
             revealCells index gridRef stateRef
         -- when in game
         -- if hidden cell clicked on, reveal cells

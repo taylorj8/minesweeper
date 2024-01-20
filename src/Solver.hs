@@ -188,11 +188,11 @@ findProbableMove grid bombsRemaining = do
     let (frontierCells, frontierNeighbours, numOthers) = getFrontier grid
     let neighbourCells = convertCells frontierNeighbours grid frontierCells
     -- too many cells, generating all possible arrangments would take too long so make a naive guess
+    print $ length frontierCells
     if length frontierCells > 92 && bombsRemaining > 12 then return $ Naive $ getNaiveGuess neighbourCells
     else do
         -- generate all possible valid arrangements using backtracking
-        -- let arrangements = findValidArrangements frontierCells bombsRemaining neighbourCells
-        arrangements <- findValidArrangements' frontierCells bombsRemaining neighbourCells
+        arrangements <- findValidArrangements frontierCells bombsRemaining neighbourCells
         -- calculate each cell containing a bomb
         return $ toProbList frontierCells $ calculateProbabilities arrangements bombsRemaining numOthers
 
@@ -269,33 +269,9 @@ stateIs s c = cellState c == s
 -- find all possible valid arrangements of bombs
 -- uses backtracking to stop generating possibilities that contain an invalid subarrangement
 -- result doesn't check that too few bombs have been placed, so filter out these cases
-findValidArrangements :: [Int] -> Int -> [NeighbourCell] -> [Arrangement]
-findValidArrangements availableCells remainingBombs frontierNeighbours = filter isValidArrangement $ findValidArrs availableCells remainingBombs []
-    where
-        findValidArrs :: [Int] -> Int -> Arrangement -> [Arrangement]
-        findValidArrs [] _ currentArrangement = [currentArrangement]  -- stop when out of cells
-        findValidArrs _ 0 currentArrangement = [currentArrangement]   -- stop when out of bombs
-        -- for each available cell, it can either be included or excluded
-        -- recursively find all other arrangements in each case and combine results
-        findValidArrs (current : rest) remainingBombs currentArrangement
-            | isValidSubArrangement currentArrangement =
-                findValidArrs rest (remainingBombs-1) (current : currentArrangement) ++ findValidArrs rest remainingBombs currentArrangement
-            | otherwise = findValidArrs rest remainingBombs currentArrangement
-        -- count the number of bombs in an arrangement and compare to n of each cell
-        -- a subarrangement is valid if too many bombs aren't placed beside any neighbour cell
-        -- a whole arrangment is valid if the exact right number of bombs are placed by all neighbour cells
-        isValidSubArrangement arrangement = all (isValid (>=) arrangement) frontierNeighbours
-        isValidArrangement arrangement = all (isValid (==) arrangement) frontierNeighbours
-        isValid c arrangement (n, neighbours) = n `c` length (filter (`S.member` neighbours) arrangement)
-
-
-
--- find all possible valid arrangements of bombs
--- uses backtracking to stop generating possibilities that contain an invalid subarrangement
--- result doesn't check that too few bombs have been placed, so filter out these cases
-findValidArrangements' :: [Int] -> Int -> [NeighbourCell] -> IO [Arrangement]
-findValidArrangements' availableCells remainingBombs frontierNeighbours = do
-    temp <- findValidArrs availableCells remainingBombs [] 5
+findValidArrangements :: [Int] -> Int -> [NeighbourCell] -> IO [Arrangement]
+findValidArrangements availableCells remainingBombs frontierNeighbours = do
+    temp <- findValidArrs availableCells remainingBombs [] 8
     return $ filter isValidArrangement temp
     where
         findValidArrs :: [Int] -> Int -> Arrangement -> Int -> IO [Arrangement]
@@ -309,6 +285,8 @@ findValidArrangements' availableCells remainingBombs frontierNeighbours = do
                 r2 <- findValidArrs rest remainingBombs currentArrangement 0
                 return (r1 ++ r2) 
             | otherwise = return [tail currentArrangement]
+        -- for the first 8 recursions, spawn new threads
+        -- deeper once deeper than that, overhead of spawning thread greater than benefit
         findValidArrs (current : rest) remainingBombs currentArrangement remainingThreads
             | isValidSubArrangement currentArrangement = do
                 resInclude <- newEmptyMVar
