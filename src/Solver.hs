@@ -11,7 +11,7 @@ import Data.List (partition, nub, groupBy, sortBy, minimumBy)
 import Data.Function (on)
 import Data.Ord (comparing, Down (Down))
 import Data.Ratio ((%))
-import Control.Concurrent (threadDelay)
+import Control.Concurrent (threadDelay, forkIO, newEmptyMVar, putMVar, takeMVar)
 import qualified Data.Set as S
 
 
@@ -41,7 +41,7 @@ solve gridRef stateRef currentRef probRef probText = do
                         else do
                             -- if logical move can't be found, calculate probabilistic move
                             element probText # set UI.text "Calculating"
-                            let probList = findProbableMove grid bombsRemaining
+                            probList <- liftIO $ findProbableMove grid bombsRemaining
                             liftIO $ writeIORef probRef probList
                             case probList of
                                 -- if move found is uncertain or naive, show probability but don't take move
@@ -182,18 +182,19 @@ takeCertainMove gridRef stateRef probRef probText guaranteedCells = case guarant
 
 
 -- find a probable move
-findProbableMove :: Grid -> Int -> ProbableMove
+findProbableMove :: Grid -> Int -> IO ProbableMove
 findProbableMove grid bombsRemaining = do
     -- get the frontier cells, their neighbours and the number of remaining hidden cells
     let (frontierCells, frontierNeighbours, numOthers) = getFrontier grid
     let neighbourCells = convertCells frontierNeighbours grid frontierCells
     -- too many cells, generating all possible arrangments would take too long so make a naive guess
-    if length frontierCells > 92 && bombsRemaining > 12 then Naive $ getNaiveGuess neighbourCells
+    if length frontierCells > 92 && bombsRemaining > 12 then return $ Naive $ getNaiveGuess neighbourCells
     else do
         -- generate all possible valid arrangements using backtracking
-        let arrangements = findValidArrangements frontierCells bombsRemaining neighbourCells
+        -- let arrangements = findValidArrangements frontierCells bombsRemaining neighbourCells
+        arrangements <- findValidArrangements' frontierCells bombsRemaining neighbourCells
         -- calculate each cell containing a bomb
-        toProbList frontierCells $ calculateProbabilities arrangements bombsRemaining numOthers
+        return $ toProbList frontierCells $ calculateProbabilities arrangements bombsRemaining numOthers
 
 
 -- make a guess based on individual cells
@@ -288,6 +289,52 @@ findValidArrangements availableCells remainingBombs frontierNeighbours = filter 
         isValid c arrangement (n, neighbours) = n `c` length (filter (`S.member` neighbours) arrangement)
 
 
+
+-- find all possible valid arrangements of bombs
+-- uses backtracking to stop generating possibilities that contain an invalid subarrangement
+-- result doesn't check that too few bombs have been placed, so filter out these cases
+findValidArrangements' :: [Int] -> Int -> [NeighbourCell] -> IO [Arrangement]
+findValidArrangements' availableCells remainingBombs frontierNeighbours = do
+    temp <- findValidArrs availableCells remainingBombs [] 5
+    return $ filter isValidArrangement temp
+    where
+        findValidArrs :: [Int] -> Int -> Arrangement -> Int -> IO [Arrangement]
+        findValidArrs [] _ currentArrangement _ = return [currentArrangement]  -- stop when out of cells
+        findValidArrs _ 0 currentArrangement _ = return [currentArrangement]   -- stop when out of bombs
+        -- for each available cell, it can either be included or excluded
+        -- recursively find all other arrangements in each case and combine results
+        findValidArrs (current : rest) remainingBombs currentArrangement 0
+            | isValidSubArrangement currentArrangement = do
+                r1 <- findValidArrs rest (remainingBombs-1) (current : currentArrangement) 0
+                r2 <- findValidArrs rest remainingBombs currentArrangement 0
+                return (r1 ++ r2) 
+            | otherwise = return [tail currentArrangement]
+        findValidArrs (current : rest) remainingBombs currentArrangement remainingThreads
+            | isValidSubArrangement currentArrangement = do
+                resInclude <- newEmptyMVar
+                resExclude <- newEmptyMVar
+
+                forkIO $ do
+                    res <- findValidArrs rest (remainingBombs-1) (current : currentArrangement) (remainingThreads-1)
+                    putMVar resInclude res
+                
+                forkIO $ do
+                    res <- findValidArrs rest remainingBombs currentArrangement (remainingThreads-1)
+                    putMVar resExclude res
+                
+                r1 <- takeMVar resInclude
+                r2 <- takeMVar resExclude
+                return (r1 ++ r2)
+            | otherwise = return [tail currentArrangement]
+        -- count the number of bombs in an arrangement and compare to n of each cell
+        -- a subarrangement is valid if too many bombs aren't placed beside any neighbour cell
+        -- a whole arrangment is valid if the exact right number of bombs are placed by all neighbour cells
+        isValidSubArrangement arrangement = all (isValid (>=) arrangement) frontierNeighbours
+        isValidArrangement arrangement = all (isValid (==) arrangement) frontierNeighbours
+        isValid c arrangement (n, neighbours) = n `c` length (filter (`S.member` neighbours) arrangement)
+
+
+
 -- calculate the probabilities of each cell from the valid arrangements
 -- returns index mapped to probability
 -- Integer and Rational used to avoid overflow
@@ -300,9 +347,6 @@ calculateProbabilities arrangements remainingBombs numOthers = do
     let weightedCounts = weightedCount arrangements counts
     -- divide by the number of possible arrangments to get a probability for each cell
     map (\(i, prob) -> (i, prob % totalArrangements)) weightedCounts
-    -- find any cells that don't appear in any arrangement and add them with probability 0
-    -- let safeCells = filter (`notElem` map fst cellProbs) frontierCells
-    -- cellProbs ++ zip safeCells (repeat 0.0)
     where
         ch bombsPlaced = numOthers `choose` (remainingBombs - bombsPlaced)
         weightedCount :: [[Int]] -> [Integer] -> [(Int, Integer)]

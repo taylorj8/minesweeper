@@ -157,6 +157,7 @@ clickCell index gridRef stateRef probText = do
             liftIO $ writeIORef stateRef $ Playing (n*n - numBombs, numBombs)
             seed <- liftIO sysTime
             -- liftIO $ print seed
+            -- hard seed: 1705754070
             liftIO $ modifyIORef gridRef $ resetGrid numBombs index 1705754070
             revealCells index gridRef stateRef
         -- when in game
