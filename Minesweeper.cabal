@@ -21,4 +21,5 @@ executable Minesweeper
                      , random
                      , time
                      , vector
+                     , containers
 

@@ -1,6 +1,7 @@
 module Util where
 
 import qualified Data.Vector as V
+import qualified Data.Set as S
 import Graphics.UI.Threepenny.Core (Element)
 
 -- tracks the state of the game
@@ -83,18 +84,19 @@ totalSize :: Grid -> Int
 totalSize (Grid n _ _) = n*n
 
  -- either contains or unsafe options
- -- Certain has list of guaranteed bombs to flag
+ -- Certain has list of guaranteed bombs to flag and guaranteed safe cells
  -- Uncertain and Naive contain cell with lowest probability of a bomb
  -- Naive may be inaccurate
 data ProbableMove
-    = Certain [Int]
+    = Certain ([Int], [Int])
     | Uncertain (Int, Rational)
     | Naive (Int, Float)
     | None
     deriving Show
 
--- contains number of unflagged bombs and list of neighbouring frontier cells
-type NeighbourCell = (Int, [Int])
+-- contains number of unflagged bombs and set of neighbouring frontier cells
+-- set used for O(logN) lookup
+type NeighbourCell = (Int, S.Set Int)
 
 -- possible arrangement of bombs
 type Arrangement = [Int]

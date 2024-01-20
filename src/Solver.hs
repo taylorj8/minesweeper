@@ -12,6 +12,7 @@ import Data.Function (on)
 import Data.Ord (comparing, Down (Down))
 import Data.Ratio ((%))
 import Control.Concurrent (threadDelay)
+import qualified Data.Set as S
 
 
 -- figures out next move and performs it if completely safe
@@ -52,12 +53,9 @@ solve gridRef stateRef currentRef probRef probText = do
                                     element probText # set UI.text ("~" ++ (show (round (prob*100)) ++ "%"))
                                     return False
                                 -- otherwise make move
-                                Certain (flag : rest) -> do
+                                Certain guaranteedCells -> do 
                                     element probText # set UI.text ""
-                                    flagCell flag gridRef stateRef probText
-                                    if null rest then liftIO $ writeIORef probRef None
-                                    else liftIO $ writeIORef probRef $ Certain rest
-                                    return True
+                                    takeCertainMove gridRef stateRef probRef probText guaranteedCells
                                 _ -> return False
                     -- uncertain/naive moves from last turn are taken here
                     -- also certain moves if more than one found
@@ -93,7 +91,7 @@ autoSolve gridRef stateRef currentRef probRef (probText, autoButton) = do
             -- allows player to choose whether to take chance
             continue <- solve gridRef stateRef currentRef probRef probText
             if continue then do
-                liftIO $ threadDelay 75000  -- delay for dramatic effect
+                -- liftIO $ threadDelay 75000  -- delay for dramatic effect
                 autoSolve' gridRef stateRef currentRef probRef
             else do
                 -- unhighlight button to show stop
@@ -153,13 +151,8 @@ takeProbableMove :: IORef Grid -> IORef GameState -> IORef ProbableMove -> Eleme
 takeProbableMove gridRef stateRef probRef probText = do
     probList <- liftIO $ readIORef probRef
     case probList of
-        -- contains list of guaranteed bombs
-        Certain (flag : rest) -> do
-            -- flag first in list then update IORef with remaining
-            flagCell flag gridRef stateRef probText
-            if null rest then liftIO $ writeIORef probRef None
-            else liftIO $ writeIORef probRef $ Certain rest
-            return True
+        -- contains list of guaranteed bombs and safe cells
+        Certain guaranteedCells -> takeCertainMove gridRef stateRef probRef probText guaranteedCells
         -- both below contain the safest cell found from unsafe options
         -- click it and update IORef
         Uncertain (safest, prob) -> do
@@ -173,6 +166,21 @@ takeProbableMove gridRef stateRef probRef probText = do
         _ -> return False
 
 
+-- makes a move from list of certain moves
+takeCertainMove :: IORef Grid -> IORef GameState -> IORef ProbableMove -> Element -> ([Int], [Int]) -> UI Bool
+takeCertainMove gridRef stateRef probRef probText guaranteedCells = case guaranteedCells of
+    (flag : rest, safes) -> do
+        flagCell flag gridRef stateRef probText
+        liftIO $ writeIORef probRef $ Certain (rest, safes)
+        return True
+    ([], safe : rest) -> do
+        clickCell safe gridRef stateRef probText
+        if null rest then liftIO $ writeIORef probRef None
+        else liftIO $ writeIORef probRef $ Certain ([], rest)
+        return True
+    _ -> return False
+
+
 -- find a probable move
 findProbableMove :: Grid -> Int -> ProbableMove
 findProbableMove grid bombsRemaining = do
@@ -180,12 +188,12 @@ findProbableMove grid bombsRemaining = do
     let (frontierCells, frontierNeighbours, numOthers) = getFrontier grid
     let neighbourCells = convertCells frontierNeighbours grid frontierCells
     -- too many cells, generating all possible arrangments would take too long so make a naive guess
-    if length frontierCells > 32 && bombsRemaining > 12 then Naive $ getNaiveGuess neighbourCells
+    if length frontierCells > 92 && bombsRemaining > 12 then Naive $ getNaiveGuess neighbourCells
     else do
         -- generate all possible valid arrangements using backtracking
         let arrangements = findValidArrangements frontierCells bombsRemaining neighbourCells
         -- calculate each cell containing a bomb
-        toProbList $ calculateProbabilities arrangements bombsRemaining numOthers
+        toProbList frontierCells $ calculateProbabilities arrangements bombsRemaining numOthers
 
 
 -- make a guess based on individual cells
@@ -193,18 +201,22 @@ findProbableMove grid bombsRemaining = do
 getNaiveGuess :: [NeighbourCell] -> (Int, Float)
 getNaiveGuess cells = getSafest $ map checkCell cells
     where
-        checkCell (num, neighbours) = (head neighbours, fromIntegral num / fromIntegral (length neighbours))
+        checkCell (num, neighbours) = (minimum neighbours, fromIntegral num / fromIntegral (length neighbours))
 
 
 -- takes in list of indexes to probabilities
 -- partition out the guaranteed bombs
-toProbList :: [(Int, Rational)] -> ProbableMove
-toProbList probs = case partition ((==1.0) . snd) probs of
-        ([], []) -> None
+-- any cells that don't appear in the list are safe
+toProbList :: [Int] -> [(Int, Rational)] -> ProbableMove
+toProbList frontierCells probs = do
+    let safe = filter (`notElem` map fst probs) frontierCells
+    let (bombs, uncertain) = partition ((==1.0) . snd) probs
+    case (bombs, safe, uncertain) of
+        ([], [], []) -> None
         -- if no guaranteed bomb, choose the index with the lowest probability
-        ([], uncertain) -> Uncertain $ getSafest uncertain
+        ([], [], uncertain) -> Uncertain $ getSafest uncertain
         -- otherwise return all guaranteed bombs to be flagged
-        (bombs, _) -> Certain (map fst bombs)
+        (bombs, safe, _) -> Certain (map fst bombs, safe)
 
 
 -- helper function to get the safest option
@@ -243,9 +255,9 @@ convertCells frontierNeighbours grid frontierCells = map convertCell frontierNei
             -- subtract flagged bombs from num
             let newNum = num - length (filter (stateIs Flagged) surCells)
             -- filter neighbours to only include frontier cells
-            let neighbours = filter (`elem` frontierCells) neighbourIndexes
+            let neighbours = S.fromList $ filter (`elem` frontierCells) neighbourIndexes
             (newNum, neighbours)
-        convertCell _ = (0, [])
+        convertCell _ = (0, S.empty)
 
 
 -- return true if cell is in passed state
@@ -267,13 +279,13 @@ findValidArrangements availableCells remainingBombs frontierNeighbours = filter 
         findValidArrs (current : rest) remainingBombs currentArrangement
             | isValidSubArrangement currentArrangement =
                 findValidArrs rest (remainingBombs-1) (current : currentArrangement) ++ findValidArrs rest remainingBombs currentArrangement
-            | otherwise = [tail currentArrangement]
+            | otherwise = findValidArrs rest remainingBombs currentArrangement
         -- count the number of bombs in an arrangement and compare to n of each cell
         -- a subarrangement is valid if too many bombs aren't placed beside any neighbour cell
         -- a whole arrangment is valid if the exact right number of bombs are placed by all neighbour cells
         isValidSubArrangement arrangement = all (isValid (>=) arrangement) frontierNeighbours
         isValidArrangement arrangement = all (isValid (==) arrangement) frontierNeighbours
-        isValid c arrangement (n, neighbours) = n `c` length (filter (`elem` arrangement) neighbours)
+        isValid c arrangement (n, neighbours) = n `c` length (filter (`S.member` neighbours) arrangement)
 
 
 -- calculate the probabilities of each cell from the valid arrangements
@@ -288,6 +300,9 @@ calculateProbabilities arrangements remainingBombs numOthers = do
     let weightedCounts = weightedCount arrangements counts
     -- divide by the number of possible arrangments to get a probability for each cell
     map (\(i, prob) -> (i, prob % totalArrangements)) weightedCounts
+    -- find any cells that don't appear in any arrangement and add them with probability 0
+    -- let safeCells = filter (`notElem` map fst cellProbs) frontierCells
+    -- cellProbs ++ zip safeCells (repeat 0.0)
     where
         ch bombsPlaced = numOthers `choose` (remainingBombs - bombsPlaced)
         weightedCount :: [[Int]] -> [Integer] -> [(Int, Integer)]
