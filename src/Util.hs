@@ -151,9 +151,32 @@ combineProbs (head : rest) = foldl concatProbableMoves' head rest
             (None, x) -> x
 
 
--- contains number of unflagged bombs and set of neighbouring frontier cells
+-- contains index, number of unflagged bombs and set of neighbouring frontier cells
 -- set used for O(logN) lookup
-type NeighbourCell = (Int, S.Set Int)
+type NeighbourCell = (Int, Int, S.Set Int)
+
+-- get a neighbour cell by index
+getByIndex :: [NeighbourCell] -> Int -> NeighbourCell
+getByIndex [] _ = error "Index not found"
+getByIndex (x:xs) index = if getFst x == index then x else getByIndex xs index
+
+data Direction 
+    = North 
+    | South 
+    | East 
+    | West
+    | Diagonal
+    deriving Eq
+
+getDirection :: Int -> Int -> Int -> Direction
+getDirection n index neighbourIndex
+    | neighbourIndex == index - n = North
+    | neighbourIndex == index + n = South
+    | neighbourIndex == index + 1 = East
+    | neighbourIndex == index - 1 = West
+    | otherwise = Diagonal
+
+
 
 -- possible arrangement of bombs
 type Arrangement = [Int]
@@ -164,6 +187,15 @@ type Arrangement = [Int]
 -- Int is number of hidden cells not on the frontier
 type Frontier = ([Int], [NeighbourCell], Int)
 
+-- getter functions for 3-tuples
+getFst :: (a, b, c) -> a
+getFst (a, _, _) = a
+
+getSnd :: (a, b, c) -> b
+getSnd (_, b, _) = b
+
+getThr :: (a, b, c) -> c
+getThr (_, _, c) = c
 
 -- contains the grid size and number of bombs
 data Difficulty
@@ -196,7 +228,3 @@ getColor difficulty = case difficulty of
     Easy _ -> "palegreen"
     Medium _ -> "PaleTurquoise"
     Hard _ -> "lightcoral"
-
--- get first element of 3-tuple
-getFst :: (a, b, c) -> a
-getFst (a, _, _) = a

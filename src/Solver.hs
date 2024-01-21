@@ -142,6 +142,33 @@ logicSolve gridRef stateRef currentRef probText = do
             return True
 
 
+patternSolve :: Grid -> [NeighbourCell] -> IO ProbableMove
+patternSolve grid neighbourCells = do
+    let moves = map findPattern neighbourCells
+    return $ combineProbs moves
+    where
+        findPattern :: NeighbourCell -> ProbableMove
+        findPattern cell = do
+            case cell of
+                (index, 1, frontierCells) -> do
+                    let neighbours = filter (`elem` map getFst neighbourCells) $ findNeighbours index (size grid)
+                    if length neighbours == 1 then do
+                        let pat = neighbourCells `getByIndex` head neighbours
+                        if getFst pat == 1 then do
+                            let dir = getDirection (size grid) index (head neighbours)
+                            if dir == South || dir == East then Certain ([], [S.findMax $ getThr pat])
+                            else Certain ([], [S.findMin $ getThr pat])
+                        else None
+                    else None
+                -- (index, 2, frontierCells) -> do
+                --     if length neighbours == 2 then do
+                --         let pat = neighbourCells `getByIndex` head neighbours
+                --         let dir = getDirection (size grid) index (head neighbours)
+                --         if dir == South || dir == East then return $ Certain ([], [S.findMax $ getThr pat])
+                --         else return $ Certain ([], [S.findMin $ getThr pat])
+                --     else return None
+                _ -> None
+
 -- check the probability list and perform the move inside
 -- could be a safe or unsafe move
 takeProbableMove :: IORef Grid -> IORef GameState -> IORef ProbableMove -> IORef Int -> Element -> UI Bool
@@ -199,9 +226,10 @@ findProbableMove grid bombsRemaining = do
         -- too many cells, generating all possible arrangments would take too long so make a naive guess
         -- print $ length frontierCells
         let frontiers = separateFrontiers neighbourCells numOthers (length neighbourCells)
-        print $ map (length . getFst) frontiers
-        probabilities <- mapM (getProbableMove bombsRemaining) frontiers
-        return $ combineProbs probabilities
+        -- print $ map (length . getFst) frontiers
+        -- probabilities <- mapM (getProbableMove bombsRemaining) frontiers
+        -- return $ combineProbs probabilities
+        patternSolve grid neighbourCells -- todo place properly
 
 
 -- get indices of frontier cells along with number of other hidden cells
@@ -228,7 +256,7 @@ separateFrontiers :: [NeighbourCell] -> Int -> Int -> [Frontier]
 separateFrontiers neighbourCells numOthers originalLength = case neighbourCells of
     cell : rest -> do
         -- get starting point for a frontier
-        let partialFrontier = S.toList $ snd cell
+        let partialFrontier = S.toList $ getThr cell
         -- recursively find all connect frontier cells
         let (newFrontier, neighbours) = buildFrontier partialFrontier 0
         -- recursively find the rest, any neighbours already used can be ignoreed fro next recursion
@@ -240,14 +268,14 @@ separateFrontiers neighbourCells numOthers originalLength = case neighbourCells 
             let neighbours = filterNeighbours frontier neighbourCells
             -- then get the hidden neighbours of those
             -- this gives all the old values, plus some of the surrounding ones
-            let newFrontier = S.toList $ S.unions $ map snd neighbours
+            let newFrontier = S.toList $ S.unions $ map getThr neighbours
             -- check if size increases, if so recurse
             let newSize = length newFrontier
             if newSize > size then buildFrontier newFrontier newSize
             -- when the size stops increasing, all neighbouring frontier cells are found
             else (newFrontier, neighbours)
         -- neighbours are any neighbour cells that contain the cell in their neighbours set
-        filterNeighbours partialFrontier = filter (\(_, neighbours) -> any (`S.member` neighbours) partialFrontier)
+        filterNeighbours partialFrontier = filter (\(_, _, neighbours) -> any (`S.member` neighbours) partialFrontier)
 
 
 -- convert cells to a different format to more efficiently check for valid arrangements
@@ -263,8 +291,8 @@ convertCells frontierNeighbours grid frontierCells = map convertCell frontierNei
             let newNum = num - length (filter (stateIs Flagged) surCells)
             -- filter neighbours to only include frontier cells
             let neighbours = S.fromList $ filter (`elem` frontierCells) neighbourIndexes
-            (newNum, neighbours)
-        convertCell _ = (0, S.empty)
+            (index, newNum, neighbours)
+        convertCell _ = (-1, 0, S.empty)
 
 
 -- given a frontier, get the safest 
@@ -323,7 +351,7 @@ findValidArrangements availableCells remainingBombs frontierNeighbours = do
         -- a whole arrangment is valid if the exact right number of bombs are placed by all neighbour cells
         isValidSubArrangement arrangement = all (isValid (>=) arrangement) frontierNeighbours
         isValidArrangement arrangement = all (isValid (==) arrangement) frontierNeighbours
-        isValid c arrangement (n, neighbours) = n `c` length (filter (`S.member` neighbours) arrangement)
+        isValid c arrangement (_, n, neighbours) = n `c` length (filter (`S.member` neighbours) arrangement)
 
 
 -- calculate the probabilities of each cell from the valid arrangements
@@ -380,7 +408,7 @@ toProbList frontierCells probs = do
 getNaiveGuess :: [NeighbourCell] -> (Int, Float)
 getNaiveGuess cells = getSafest $ map checkCell cells
     where
-        checkCell (num, neighbours) = (minimum neighbours, fromIntegral num / fromIntegral (length neighbours))
+        checkCell (_, num, neighbours) = (minimum neighbours, fromIntegral num / fromIntegral (length neighbours))
 
 
 -- helper function to get the safest option
