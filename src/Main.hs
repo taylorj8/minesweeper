@@ -25,8 +25,8 @@ setup window = do
     runFunction $ ffi "window.oncontextmenu = function() { return false; }"
 
     -- grid parameters
-    let size = 20
-    let numBombs = 80
+    let size = 22
+    let numBombs = 99
 
     -- set up the grid
     -- contains size of grid, cells and top bar elements

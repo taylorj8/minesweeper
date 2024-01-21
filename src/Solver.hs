@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# HLINT ignore "Use zipWith" #-}
 module Solver where
 
 import Util
@@ -7,12 +9,13 @@ import qualified Graphics.UI.Threepenny as UI
 import Graphics.UI.Threepenny.Core hiding (on)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import qualified Data.Vector as V
-import Data.List (partition, nub, groupBy, sortBy, minimumBy)
+import Data.List (partition, nub, groupBy, sortBy, minimumBy, find, union, (\\))
 import Data.Function (on)
 import Data.Ord (comparing, Down (Down))
 import Data.Ratio ((%))
 import Control.Concurrent (threadDelay, forkIO, newEmptyMVar, putMVar, takeMVar)
 import qualified Data.Set as S
+import Data.Vector (uncons)
 
 
 -- figures out next move and performs it if completely safe
@@ -56,7 +59,7 @@ solve gridRef stateRef currentRef probRef probText = do
                                 Certain guaranteedCells -> do
                                     element probText # set UI.text ""
                                     takeCertainMove gridRef stateRef probRef probText guaranteedCells
-                                _ -> do 
+                                _ -> do
                                     element probText # set UI.text "None"
                                     return False
                     -- uncertain/naive moves from last turn are taken here
@@ -175,7 +178,8 @@ takeCertainMove :: IORef Grid -> IORef GameState -> IORef ProbableMove -> Elemen
 takeCertainMove gridRef stateRef probRef probText guaranteedCells = case guaranteedCells of
     (flag : rest, safes) -> do
         flagCell flag gridRef stateRef probText
-        liftIO $ writeIORef probRef $ Certain (rest, safes)
+        if null rest && null safes then liftIO $ writeIORef probRef None
+        else liftIO $ writeIORef probRef $ Certain (rest, safes)
         return True
     ([], safe : rest) -> do
         clickCell safe gridRef stateRef probText
@@ -193,17 +197,15 @@ findProbableMove grid bombsRemaining = do
     -- if no frontier cells then no information about any cells
     -- in this case probability is just remaining bombs / remaining cells
     -- -1 tells solver to click first cell
-    if null frontierCells then return $ Uncertain (-1, toInteger bombsRemaining % toInteger numOthers)
+    if null frontierCells then return $ Uncertain (-1, toInteger bombsRemaining % toInteger (max numOthers 1))
     else do
         let neighbourCells = convertCells frontierNeighbours grid frontierCells
         -- too many cells, generating all possible arrangments would take too long so make a naive guess
-        print $ length frontierCells
-        if length frontierCells > 35 && bombsRemaining > 15 then return $ Naive $ getNaiveGuess neighbourCells
-        else do
-            -- generate all possible valid arrangements using backtracking
-            arrangements <- findValidArrangements frontierCells bombsRemaining neighbourCells
-            -- calculate probability of each cell containing a bomb
-            return $ toProbList frontierCells $ calculateProbabilities arrangements bombsRemaining numOthers
+        -- print $ length frontierCells
+        let frontiers = separateFrontiers neighbourCells numOthers (length neighbourCells)
+        print $ map (length . getFst) frontiers
+        probabilities <- mapM (getProbabilities bombsRemaining 8) frontiers
+        return $ combineProbs probabilities
 
 
 -- make a guess based on individual cells
@@ -270,17 +272,112 @@ convertCells frontierNeighbours grid frontierCells = map convertCell frontierNei
         convertCell _ = (0, S.empty)
 
 
--- return true if cell is in passed state
-stateIs :: CellState -> Cell -> Bool
-stateIs s c = cellState c == s
+-- checkPartialFrontiers  :: [Int] -> Int -> Int -> [NeighbourCell] -> IO ProbableMove
+-- checkPartialFrontiers availableCells remainingBombs numOthers frontierNeighbours = do
+--     partialFrontiers <- getPartialFrontier frontierNeighbours
+
+--     t <- mapM temp $ fst partialFrontiers
+--     return $ concatCertainMoves $ removeCertain (snd partialFrontiers) $ filter isCertain t
+--     where
+--         temp (partialFrontier, neighbourCells) = do
+--             -- print neighbourCells
+--             getProbabilities partialFrontier neighbourCells remainingBombs numOthers 0
+--         isCertain :: ProbableMove -> Bool
+--         isCertain (Certain _) = True
+--         isCertain _ = False
+--         getPartialFrontier :: [NeighbourCell] -> IO ([([Int], [NeighbourCell])], [[Int]])
+--         getPartialFrontier neighbourCells = do
+--             let p1 = getPartialFrontier' neighbourCells
+--             let n1 = map filterNeighbours (zip p1 (repeat neighbourCells))
+--             let p2 = map (nub . concat . getPartialFrontier') n1
+--             let p3 = map removeOverlap (zip p1 p2)
+--             print p1
+--             print p2
+--             return (zip p2 n1, p3)
+--         getPartialFrontier' neighbourCells = map (S.toList . snd) neighbourCells
+--         removeCertain lists moves = map removeCertain' (zip lists moves)
+--             where
+--                 removeCertain' (list, move) = case move of
+--                     Certain (bombs, safes) -> do
+--                         let newBombs = bombs \\ list
+--                         let newSafes = safes \\ list
+--                         if null newBombs && null newSafes then None
+--                         else Certain (newBombs, newSafes)
+--                     _ -> None
+--         removeOverlap (l1, l2) = l2 \\ l1
+
+
+-- divides the frontier into sections that don't affect each other
+separateFrontiers :: [NeighbourCell] -> Int -> Int -> [([Int], [NeighbourCell], Int)]
+separateFrontiers neighbourCells numOthers originalLength = case neighbourCells of
+    cell : rest -> do
+        -- get starting point for a frontier
+        let partialFrontier = S.toList $ snd cell
+        -- recursively find all connect frontier cells
+        let (newFrontier, neighbours) = buildFrontier partialFrontier 0
+        -- recursively find the rest, any neighbours already used can be ignoreed fro next recursion
+        (newFrontier, neighbours, numOthers + originalLength - length newFrontier) : separateFrontiers (rest \\ neighbours) numOthers originalLength
+    _ -> []
+    where
+        buildFrontier frontier size = do
+            -- first get all revealed neighbours of the current frontier
+            let neighbours = filterNeighbours frontier neighbourCells
+            -- then get the hidden neighbours of those
+            -- this gives all the old values, plus some of the surrounding ones
+            let newFrontier = S.toList $ S.unions $ map snd neighbours
+            -- check if size increases, if so recurse
+            let newSize = length newFrontier
+            if newSize > size then buildFrontier newFrontier newSize
+            -- when the size stops increasing, all neighbouring frontier cells are found
+            else (newFrontier, neighbours)
+
+
+filterNeighbours :: [Int] -> [NeighbourCell] -> [NeighbourCell]
+filterNeighbours partialFrontier = filter filterNeighbours'
+    where
+        filterNeighbours' :: NeighbourCell -> Bool
+        filterNeighbours' (_, neighbours) = any (`S.member` neighbours) partialFrontier
+
+
+getProbabilities :: Int -> Int -> ([Int], [NeighbourCell], Int) -> IO ProbableMove
+getProbabilities remainingBombs threadCount (frontierCells, neighbourCells, numOthers) =
+    if length frontierCells > 32 && remainingBombs > 12 then return $ Naive $ getNaiveGuess neighbourCells
+    else do
+        -- generate all possible valid arrangements using backtracking
+        arrangements <- findValidArrangements frontierCells remainingBombs neighbourCells threadCount
+        -- calculate probability of each cell containing a bomb
+        temp <- calculateProbabilities arrangements remainingBombs numOthers
+        return $ toProbList frontierCells temp
+
+
+-- concatenates Certains together, removing duplicates
+combineProbs :: [ProbableMove] -> ProbableMove
+combineProbs [] = None
+combineProbs (head : rest) = foldl concatProbableMoves' head rest
+    where
+        concatProbableMoves' m1 m2 = case (m1, m2) of
+            (Certain (b1, s1), Certain (b2, s2)) -> Certain ( b1 `union` b2,  s1 `union` s2)
+            (Certain x, _) -> Certain x
+            (Uncertain (i1, p1), Uncertain (i2, p2)) -> 
+                if p1 < p1 then Uncertain (i1, p1)
+                else Uncertain (i2, p2)
+            (Uncertain _, Certain x) -> Certain x
+            (Uncertain x, _) -> Uncertain x
+            (Naive (i1, p1), Naive (i2, p2)) -> 
+                if p1 < p1 then Naive (i1, p1)
+                else Naive (i2, p2)
+            (Naive _, Certain x) -> Certain x
+            (Naive _, Uncertain x) -> Uncertain x
+            (Naive x, None) -> Naive x
+            (None, x) -> x
 
 
 -- find all possible valid arrangements of bombs
 -- uses backtracking to stop generating possibilities that contain an invalid subarrangement
 -- result doesn't check that too few bombs have been placed, so filter out these cases
-findValidArrangements :: [Int] -> Int -> [NeighbourCell] -> IO [Arrangement]
-findValidArrangements availableCells remainingBombs frontierNeighbours = do
-    temp <- findValidArrs availableCells remainingBombs [] 8
+findValidArrangements :: [Int] -> Int -> [NeighbourCell] -> Int -> IO [Arrangement]
+findValidArrangements availableCells remainingBombs frontierNeighbours numThreads = do
+    temp <- findValidArrs availableCells remainingBombs [] numThreads
     return $ filter isValidArrangement temp
     where
         findValidArrs :: [Int] -> Int -> Arrangement -> Int -> IO [Arrangement]
@@ -318,33 +415,35 @@ findValidArrangements availableCells remainingBombs frontierNeighbours = do
         -- a whole arrangment is valid if the exact right number of bombs are placed by all neighbour cells
         isValidSubArrangement arrangement = all (isValid (>=) arrangement) frontierNeighbours
         isValidArrangement arrangement = all (isValid (==) arrangement) frontierNeighbours
+        -- isValidTest arrangement = all (isValid (==) arrangement) $ filterNeighbours arrangement frontierNeighbours
         isValid c arrangement (n, neighbours) = n `c` length (filter (`S.member` neighbours) arrangement)
-
 
 
 -- calculate the probabilities of each cell from the valid arrangements
 -- returns index mapped to probability
 -- Integer and Rational used to avoid overflow
-calculateProbabilities :: [[Int]] -> Int -> Int -> [(Int, Rational)]
+calculateProbabilities :: [[Int]] -> Int -> Int -> IO [(Int, Rational)]
 calculateProbabilities arrangements remainingBombs numOthers = do
-    -- for each arrangement, get the number of ways to arrange the remaining bombs
-    let counts = map (ch . length) arrangements
-    let totalArrangements = sum counts
-    -- count number of time cell contains a bomb in every possible arrangement
-    let weightedCounts = weightedCount arrangements counts
-    -- divide by the number of possible arrangments to get a probability for each cell
-    map (\(i, prob) -> (i, prob % totalArrangements)) weightedCounts
-    where
-        ch bombsPlaced = numOthers `choose` (remainingBombs - bombsPlaced)
-        weightedCount :: [[Int]] -> [Integer] -> [(Int, Integer)]
-        weightedCount arrangements counts = do
-            -- zip each arrangement with it the number of ways to arrange the remaining bombs
-            -- move that number inside each arrangement i.e. zip it with each index in the arrangement
-            let weightedArrangements = concatMap (\(arr, count) -> zip arr (repeat count)) $ zip arrangements counts
-            -- sort by the index, then group the indexes into lists
-            let groupedArrangements = groupBy ((==) `on` fst) $ sortBy (compare `on` fst) weightedArrangements
-            -- finally add the counts to get total number of times each cell contains a bomb in every possible arrangement
-            map (\group -> (fst (head group), sum (map snd group))) groupedArrangements
+    if length arrangements == 1 then return $ zip (head arrangements) (repeat 1)
+    else do
+        -- for each arrangement, get the number of ways to arrange the remaining bombs
+        let counts = map (ch . length) arrangements
+        let totalArrangements = sum counts
+        -- count number of time cell contains a bomb in every possible arrangement
+        let weightedCounts = weightedCount arrangements counts
+        -- divide by the number of possible arrangments to get a probability for each cell
+        return $ map (\(i, prob) -> (i, prob % max totalArrangements 1)) weightedCounts
+        where
+            ch bombsPlaced = numOthers `choose` (remainingBombs - bombsPlaced)
+            weightedCount :: [[Int]] -> [Integer] -> [(Int, Integer)]
+            weightedCount arrangements counts = do
+                -- zip each arrangement with it the number of ways to arrange the remaining bombs
+                -- move that number inside each arrangement i.e. zip it with each index in the arrangement
+                let weightedArrangements = concatMap (\(arr, count) -> zip arr (repeat count)) $ zip arrangements counts
+                -- sort by the index, then group the indexes into lists
+                let groupedArrangements = groupBy ((==) `on` fst) $ sortBy (compare `on` fst) weightedArrangements
+                -- finally add the counts to get total number of times each cell contains a bomb in every possible arrangement
+                map (\group -> (fst (head group), sum (map snd group))) groupedArrangements
 
 
 -- nCk - first convert to Integer to avoid overflow

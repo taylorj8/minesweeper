@@ -15,6 +15,10 @@ data GameState
     | Win
     deriving Eq
 
+-- return true if cell is in passed state
+stateIs :: CellState -> Cell -> Bool
+stateIs s c = cellState c == s
+
 -- cell can either be a bomb or a number representing surrounding bombs
 data CellType
     = Bomb
@@ -100,3 +104,8 @@ type NeighbourCell = (Int, S.Set Int)
 
 -- possible arrangement of bombs
 type Arrangement = [Int]
+
+
+-- get first element of 3-tuple
+getFst :: (a, b, c) -> a
+getFst (a, _, _) = a
