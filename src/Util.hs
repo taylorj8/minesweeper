@@ -150,6 +150,7 @@ type Arrangement = [Int]
 type Frontier = ([Int], [NeighbourCell], Int)
 
 
+-- contains the grid size and number of bombs
 data Difficulty
     = Easy (Int, Int)
     | Medium (Int, Int)
@@ -165,6 +166,10 @@ getParams (Easy params) = params
 getParams (Medium params) = params
 getParams (Hard params) = params
 
+getColor :: Difficulty -> String
+getColor (Easy _) = "palegreen"
+getColor (Medium _) = "PaleTurquoise"
+getColor (Hard _) = "lightcoral"
 
 -- get first element of 3-tuple
 getFst :: (a, b, c) -> a

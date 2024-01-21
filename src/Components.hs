@@ -17,11 +17,13 @@ makeTitle = UI.div
             ("font-family", "Trebuchet MS"),
             ("font-weight", "bold"),
             ("user-select", "none"),
-            ("color", "whitesmoke")
+            ("color", "whitesmoke"),
+            ("margin", "auto"),
+            ("margin-top", "16px")
         ]
 
-displayGrid :: [Element] -> Int -> UI Element
-displayGrid squares n = 
+makeGrid :: [Element] -> Int -> UI Element
+makeGrid squares n = 
     UI.grid (chunksOf n $ map element squares)
         # set UI.style [("margin", "auto"), ("border", "1px solid black")]
         # set UI.id_ "0"
@@ -66,6 +68,21 @@ makeSolveButton text = UI.div
         ("margin-top", "8px"),
         ("border-radius", "5px")
     ] # setCommonAttributes
+
+makeDifficultyButton :: UI Element
+makeDifficultyButton = UI.div 
+    # set UI.text "Medium"
+    # set UI.style [
+        ("width", "82px"),
+        ("height", "34px"),
+        ("line-height", "34px"),
+        ("border", "1px solid black"),
+        ("font-size", "18px"),
+        ("vertical-align", "top"),
+        ("margin", "0px 30px 0px"),
+        ("border-radius", "5px")
+    ] # setCommonAttributes
+    # set UI.style [("background-color", "PaleTurquoise")]
 
 makeProbText :: UI Element
 makeProbText = UI.div

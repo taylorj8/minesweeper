@@ -11,7 +11,7 @@ import qualified Graphics.UI.Threepenny as UI
 import Graphics.UI.Threepenny.Core as C
 
 import qualified Data.Vector as V
-import Data.IORef (IORef, newIORef, readIORef, writeIORef)
+import Data.IORef (IORef, newIORef, readIORef, writeIORef, modifyIORef)
 import Control.Monad (replicateM, when)
 import Control.Concurrent
 import Data.Maybe (maybe)
@@ -29,8 +29,8 @@ setup window = do
     runFunction $ ffi "window.oncontextmenu = function() { return false; }"
 
     -- grid parameters
-    let size = 22
-    let numBombs = 99
+    let size = 16
+    let numBombs = 40
 
     -- set up the grid
     -- contains size of grid, cells and top bar elements
@@ -58,10 +58,10 @@ setup window = do
     -- bottom row contains solve buttons and probability text
     bottomRow <- UI.row [element solveButton, element probText, element autoButton] # set UI.style [("margin", "auto")]
 
-    uiGrid <- displayGrid squares size
+    uiGrid <- makeGrid squares size
     gridContainer <- UI.div #+ [element uiGrid]
     difficultyRef <- liftIO $ newIORef $ Medium (16, 40)
-    difficultyButton <- makeSolveButton "Medium"
+    difficultyButton <- makeDifficultyButton
 
     -- set up restart button and arrange in a row
     restartButton <- topCell "↺"
@@ -75,7 +75,7 @@ setup window = do
     body #+
         [
             UI.div #+ [element title],
-            UI.div #+ [element topRow],
+            UI.div #+ [element topRow] # set UI.style [("margin-bottom", "8px")],
             element gridContainer,
             UI.div #+ [element bottomRow]
         ]
@@ -106,19 +106,18 @@ changeDifficulty stateRef difficultyRef difficultyButton window gridContainer gr
         GameStart _ -> do
             difficulty <- liftIO $ readIORef difficultyRef
             let newDifficulty = change difficulty
-            element difficultyButton # set UI.text (show newDifficulty)
-            liftIO $ print newDifficulty
+            element difficultyButton 
+                # set UI.text (show newDifficulty)
+                # set UI.style [("background-color", getColor newDifficulty)]
             liftIO $ writeIORef difficultyRef newDifficulty
 
             let (size, numBombs) = getParams newDifficulty
             element bombCounter # set UI.text (show numBombs)
             liftIO $ modifyIORef stateRef (updateState numBombs)
 
-            liftIO $ print size
-
             deleteGrid
             squares <- replicateM (size*size) uiCell
-            newUiGrid <- displayGrid squares size
+            newUiGrid <- makeGrid squares size
 
             liftIO $ modifyIORef gridRef (updateGrid size squares)
             setOnClick gridRef stateRef probRef probText

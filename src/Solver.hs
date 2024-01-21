@@ -72,7 +72,7 @@ solve gridRef stateRef currentRef probRef probText = do
 autoSolve :: IORef Grid -> IORef GameState -> IORef Int -> IORef ProbableMove -> (Element, Element) -> UI ()
 autoSolve gridRef stateRef currentRef probRef (probText, autoButton) = do
     -- highlight button while auto solver running
-    element autoButton # set UI.style [("background-color", "LightGoldenRodYellow")]
+    element autoButton # set UI.style [("background-color", "Khaki")]
     autoSolve' gridRef stateRef currentRef probRef
     where
         autoSolve' gridRef stateRef currentRef probRef = do
