@@ -84,7 +84,7 @@ resetGrid numBombs firstCell seed grid = countBombs $ placeBombs grid $ randSele
 -- return a grid with all empty cells
 -- used before first cell revealed, then resetGrid called
 emptyGrid :: Int -> (Element, Element) -> [Element] -> Grid
-emptyGrid size bar squares = Grid size bar $ V.fromList $ map (blankCell) (zip squares [0..])
+emptyGrid size bar squares = Grid size bar $ V.fromList $ map (blankCell) (zip squares [0..size*size])
     where
         blankCell (e, i) = Cell i e Hidden (Empty 0)
 
@@ -249,33 +249,6 @@ flagCell index gridRef stateRef probText = do
                 updateCounter op (Playing (t, c)) = Playing (t, c `op` 1)
                 updateCounter _ s = s
         _ -> return ()
-
-
--- restarts the game
-handleRestart :: IORef Grid -> IORef GameState -> IORef Int -> IORef ProbableMove -> IORef Difficulty -> Element -> UI ()
-handleRestart gridRef stateRef solveRef probRef difficultyRef probText = do
-    Grid _ top cells <- liftIO $ readIORef gridRef
-    difficulty <- liftIO $ readIORef difficultyRef
-    let (_, numBombs) = getParams difficulty
-    resetTopBar top numBombs  -- reset title and flag count
-    V.mapM_ resetSquare cells  -- reset UI
-    -- reset IORefs
-    element probText # set UI.text ""
-    liftIO $ writeIORef stateRef (GameStart numBombs) 
-    liftIO $ modifyIORef gridRef $ \grid -> grid { cells = V.map resetCell cells }
-    liftIO $ writeIORef solveRef 0
-    liftIO $ writeIORef probRef None
-        where
-            -- set cell as hidden and empty
-            resetCell (Cell index square _ _) = Cell index square Hidden (Empty 0)
-            -- remove text and set color back to grey
-            resetSquare (Cell _ square _ _) = element square
-                # set UI.style [("background-color", "lightgrey")]
-                # set UI.text ""
-            -- reset top bar text
-            resetTopBar (title, counter) numBombs = do
-                element title # set UI.text "Minesweeper"
-                element counter # set UI.text (show numBombs)
 
 
 -- update the UI of all bomb cells depending on game state

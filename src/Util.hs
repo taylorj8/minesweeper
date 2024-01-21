@@ -16,6 +16,13 @@ data GameState
     | Win
     deriving Eq
 
+-- update the gamestate with the new number of bombs
+updateState :: Int -> GameState -> GameState
+updateState numBombs gameState = do
+    case gameState of
+        GameStart _ -> GameStart numBombs
+        _ -> gameState
+
 -- return true if cell is in passed state
 stateIs :: CellState -> Cell -> Bool
 stateIs s c = cellState c == s
@@ -81,6 +88,14 @@ instance Show Grid where
         where
             rows = [take n $ drop (i*n) $ V.toList cells | i <- [0..n-1]]
             showRow = unwords . map show
+
+-- update the size and squares of the grid
+updateGrid :: Int -> [Element] -> Grid -> Grid
+updateGrid size squares grid = do
+    let newCells = V.fromList $ zipWith (curry updateSquare) squares [0..size*size]
+    grid { size = size, cells = newCells }
+    where
+        updateSquare (square, index) = Cell index square Hidden (Empty 0)
 
 -- grid helper functions
 getCell :: Grid -> Int -> Cell
@@ -161,15 +176,26 @@ instance Show Difficulty where
     show (Medium _) = "Medium"
     show (Hard _) = "Hard"
 
-getParams :: Difficulty -> (Int, Int)
-getParams (Easy params) = params
-getParams (Medium params) = params
-getParams (Hard params) = params
+-- cycle through difficulties
+change :: Difficulty -> Difficulty
+change difficulty = case difficulty of
+    Easy _ -> Medium (16, 40)
+    Medium _ -> Hard (22, 99)
+    Hard _ -> Easy (9, 10)
 
+-- get the difficulty parameters
+getParams :: Difficulty -> (Int, Int)
+getParams difficulty = case difficulty of
+    Easy params -> params
+    Medium params -> params
+    Hard params -> params
+
+-- get the color of the button at each difficulty
 getColor :: Difficulty -> String
-getColor (Easy _) = "palegreen"
-getColor (Medium _) = "PaleTurquoise"
-getColor (Hard _) = "lightcoral"
+getColor difficulty = case difficulty of 
+    Easy _ -> "palegreen"
+    Medium _ -> "PaleTurquoise"
+    Hard _ -> "lightcoral"
 
 -- get first element of 3-tuple
 getFst :: (a, b, c) -> a
