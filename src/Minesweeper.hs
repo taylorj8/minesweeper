@@ -252,10 +252,12 @@ flagCell index gridRef stateRef probText = do
 
 
 -- restarts the game
-handleRestart :: IORef Grid -> IORef GameState -> IORef Int -> IORef ProbableMove -> Element -> Int -> UI ()
-handleRestart gridRef stateRef solveRef probRef probText numBombs = do
+handleRestart :: IORef Grid -> IORef GameState -> IORef Int -> IORef ProbableMove -> IORef Difficulty -> Element -> UI ()
+handleRestart gridRef stateRef solveRef probRef difficultyRef probText = do
     Grid _ top cells <- liftIO $ readIORef gridRef
-    resetTopBar top  -- reset title and flag count
+    difficulty <- liftIO $ readIORef difficultyRef
+    let (_, numBombs) = getParams difficulty
+    resetTopBar top numBombs  -- reset title and flag count
     V.mapM_ resetSquare cells  -- reset UI
     -- reset IORefs
     element probText # set UI.text ""
@@ -271,7 +273,7 @@ handleRestart gridRef stateRef solveRef probRef probText numBombs = do
                 # set UI.style [("background-color", "lightgrey")]
                 # set UI.text ""
             -- reset top bar text
-            resetTopBar (title, counter) = do
+            resetTopBar (title, counter) numBombs = do
                 element title # set UI.text "Minesweeper"
                 element counter # set UI.text (show numBombs)
 

@@ -21,10 +21,10 @@ makeTitle = UI.div
         ]
 
 displayGrid :: [Element] -> Int -> UI Element
-displayGrid squares n = UI.div #+ [
-        UI.grid (chunksOf n $ map element squares)
-            # set UI.style [("margin", "auto"), ("border", "1px solid black")]
-    ]
+displayGrid squares n = 
+    UI.grid (chunksOf n $ map element squares)
+        # set UI.style [("margin", "auto"), ("border", "1px solid black")]
+        # set UI.id_ "0"
 
 uiCell :: UI Element
 uiCell = UI.div # set UI.style [

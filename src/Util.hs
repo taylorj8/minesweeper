@@ -150,6 +150,22 @@ type Arrangement = [Int]
 type Frontier = ([Int], [NeighbourCell], Int)
 
 
+data Difficulty
+    = Easy (Int, Int)
+    | Medium (Int, Int)
+    | Hard (Int, Int)
+
+instance Show Difficulty where
+    show (Easy _) = "Easy"
+    show (Medium _) = "Medium"
+    show (Hard _) = "Hard"
+
+getParams :: Difficulty -> (Int, Int)
+getParams (Easy params) = params
+getParams (Medium params) = params
+getParams (Hard params) = params
+
+
 -- get first element of 3-tuple
 getFst :: (a, b, c) -> a
 getFst (a, _, _) = a
