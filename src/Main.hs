@@ -11,7 +11,7 @@ import qualified Graphics.UI.Threepenny as UI
 import Graphics.UI.Threepenny.Core as C
 
 import qualified Data.Vector as V
-import Data.IORef (IORef, newIORef, readIORef, writeIORef, modifyIORef)
+import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Control.Monad (replicateM, when)
 import Control.Concurrent
 import Data.Maybe (maybe)
@@ -28,9 +28,9 @@ setup window = do
     -- stops context menu appearing when attempting to place flags
     runFunction $ ffi "window.oncontextmenu = function() { return false; }"
 
-    -- initial grid parameters
-    let size = 16
-    let numBombs = 40
+    -- grid parameters
+    let size = 22
+    let numBombs = 99
 
     -- set up the grid
     -- contains size of grid, cells and top bar elements
