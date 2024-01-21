@@ -28,7 +28,7 @@ randSelect n numBombs firstCell seed = take numBombs . nub . filter (`notElem` s
 sysTime :: IO Int
 sysTime = do
     time <- getCurrentTime
-    return $ floor . nominalDiffTimeToSeconds . utcTimeToPOSIXSeconds $ time
+    return $ floor $ (*10) $ nominalDiffTimeToSeconds . utcTimeToPOSIXSeconds $ time
 
 
 -- place bombs at the given indices
@@ -84,7 +84,7 @@ resetGrid numBombs firstCell seed grid = countBombs $ placeBombs grid $ randSele
 -- return a grid with all empty cells
 -- used before first cell revealed, then resetGrid called
 emptyGrid :: Int -> (Element, Element) -> [Element] -> Grid
-emptyGrid size bar squares = Grid size bar $ V.fromList $ map (blankCell) (zip squares [0..])
+emptyGrid size bar squares = Grid size bar $ V.fromList $ map (blankCell) (zip squares [0..size*size])
     where
         blankCell (e, i) = Cell i e Hidden (Empty 0)
 
@@ -103,16 +103,6 @@ revealIndexes grid index = revealIndexes' grid [index] [index]
                 let newNeighbours = (findNeighbours current (size grid)) \\ indexes
                 revealIndexes' grid (indexes ++ newNeighbours) (rest ++ newNeighbours)
             otherwise -> revealIndexes' grid indexes rest
-
-
-
--- toggleFlagged :: Int -> Grid -> Grid
--- toggleFlagged index (Grid n c cells) = do
---     let cell = cells V.! index
---     case cellState cell of
---         Hidden -> Grid n c (cells V.// [(index, cell { cellState = Flagged })])
---         Flagged -> Grid n c (cells V.// [(index, cell { cellState = Hidden })])
---         Revealed -> Grid n c cells
 
 
 -- set cellState to Flagged if Hidden and vice versa for indices given
@@ -157,6 +147,7 @@ clickCell index gridRef stateRef probText = do
             liftIO $ writeIORef stateRef $ Playing (n*n - numBombs, numBombs)
             seed <- liftIO sysTime
             -- liftIO $ print seed
+            -- hard seed: 1705754070, 17057637450
             liftIO $ modifyIORef gridRef $ resetGrid numBombs index seed
             revealCells index gridRef stateRef
         -- when in game
@@ -258,31 +249,6 @@ flagCell index gridRef stateRef probText = do
                 updateCounter op (Playing (t, c)) = Playing (t, c `op` 1)
                 updateCounter _ s = s
         _ -> return ()
-
-
--- restarts the game
-handleRestart :: IORef Grid -> IORef GameState -> IORef Int -> IORef ProbableMove -> Element -> Int -> UI ()
-handleRestart gridRef stateRef solveRef probRef probText numBombs = do
-    Grid _ top cells <- liftIO $ readIORef gridRef
-    resetTopBar top  -- reset title and flag count
-    V.mapM_ resetSquare cells  -- reset UI
-    -- reset IORefs
-    element probText # set UI.text ""
-    liftIO $ writeIORef stateRef (GameStart numBombs) 
-    liftIO $ modifyIORef gridRef $ \grid -> grid { cells = V.map resetCell cells }
-    liftIO $ writeIORef solveRef 0
-    liftIO $ writeIORef probRef None
-        where
-            -- set cell as hidden and empty
-            resetCell (Cell index square _ _) = Cell index square Hidden (Empty 0)
-            -- remove text and set color back to grey
-            resetSquare (Cell _ square _ _) = element square
-                # set UI.style [("background-color", "lightgrey")]
-                # set UI.text ""
-            -- reset top bar text
-            resetTopBar (title, counter) = do
-                element title # set UI.text "Minesweeper"
-                element counter # set UI.text (show numBombs)
 
 
 -- update the UI of all bomb cells depending on game state

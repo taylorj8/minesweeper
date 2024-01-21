@@ -11,20 +11,22 @@ makeTitle = UI.div
         # set UI.text "Minesweeper"
         # set UI.style [
             ("width", "250px"),
-            ("height", "40px"),
+            ("height", "50px"),
             ("text-align", "center"),
-            ("font-size", "23px"),
+            ("font-size", "26px"),
             ("font-family", "Trebuchet MS"),
             ("font-weight", "bold"),
             ("user-select", "none"),
-            ("color", "whitesmoke")
+            ("color", "whitesmoke"),
+            ("margin", "auto"),
+            ("margin-top", "8px")
         ]
 
-displayGrid :: [Element] -> Int -> UI Element
-displayGrid squares n = UI.div #+ [
-        UI.grid (chunksOf n $ map element squares)
-            # set UI.style [("margin", "auto"), ("border", "1px solid black")]
-    ]
+makeGrid :: [Element] -> Int -> UI Element
+makeGrid squares n = 
+    UI.grid (chunksOf n $ map element $ take (n*n) squares)
+        # set UI.style [("margin", "auto"), ("border", "1px solid black")]
+        # set UI.id_ "0"
 
 uiCell :: UI Element
 uiCell = UI.div # set UI.style [
@@ -67,6 +69,23 @@ makeSolveButton text = UI.div
         ("border-radius", "5px")
     ] # setCommonAttributes
 
+makeDifficultyButton :: UI Element
+makeDifficultyButton = UI.div 
+    # set UI.text "Medium"
+    # set UI.style [
+        ("width", "84px"),
+        ("height", "34px"),
+        ("line-height", "34px"),
+        ("border", "1px solid black"),
+        ("font-size", "18px"),
+        ("vertical-align", "middle"),
+        ("margin", "0px 30px"),
+        ("border-radius", "5px"),
+        ("position", "relative"), 
+        ("top", "-1px")
+    ] # setCommonAttributes
+    # set UI.style [("background-color", "PaleTurquoise")]
+
 makeProbText :: UI Element
 makeProbText = UI.div
         # set UI.style [
@@ -90,8 +109,8 @@ setCommonAttributes = set UI.style [
     ]
 
 -- style the background
-setBackgroundStyle :: String -> UI Element -> UI Element
-setBackgroundStyle image = set UI.style [
+setBackground :: String -> UI Element -> UI Element
+setBackground image = set UI.style [
         ("background-image", "url('/static/" ++ image ++ "')"),
         ("background-size", "cover"),
         ("background-repeat", "no-repeat"),
