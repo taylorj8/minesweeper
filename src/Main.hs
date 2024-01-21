@@ -45,9 +45,9 @@ setup window = do
     solveRef <- liftIO $ newIORef 0
 
     -- initialise state and set onclick functions for the cells
-    probText <- makeProbText
     stateRef <- liftIO $ newIORef $ GameStart numBombs
-    setOnClick gridRef stateRef probRef probText
+    probText <- makeProbText
+    setOnClick squares gridRef stateRef probRef probText
 
     -- set up solve buttons
     solveButton <- makeSolveButton "Play Move"
@@ -69,7 +69,7 @@ setup window = do
     -- set up restart and difficulty buttons
     restartButton <- topCell "↺"
     on UI.click restartButton $ \_ -> handleRestart gridRef stateRef solveRef probRef difficultyRef probText
-    on UI.click difficultyButton $ \_ -> changeDifficulty difficultyRef stateRef gridRef probRef window gridContainer probText bombCounter difficultyButton squares
+    on UI.click difficultyButton $ \_ -> changeDifficulty difficultyRef stateRef gridRef window gridContainer bombCounter difficultyButton squares
     topRow <- UI.row [element bombCounter, element difficultyButton, element restartButton] # set UI.style [("margin", "auto")]
 
     -- set background image and window content
@@ -87,12 +87,10 @@ setup window = do
 
 -- set up click handlers for each cell
 -- left click to reveal cell, right click to place flag
-setOnClick :: IORef Grid -> IORef GameState -> IORef ProbableMove -> Element -> UI ()
-setOnClick gridRef stateRef probRef probText = do
-    (Grid _ _ cells) <- liftIO $ readIORef gridRef
-    mapM_ (clickHandlers gridRef) cells
+setOnClick :: [Element] -> IORef Grid -> IORef GameState -> IORef ProbableMove -> Element -> UI ()
+setOnClick squares gridRef stateRef probRef probText = mapM_ clickHandlers (zip squares [0..])
         where
-            clickHandlers gridRef (Cell i square state _) = do
+            clickHandlers (square, i) = do
                 -- if player updates the grid, probable move needs recalculated
                 on UI.click square $ \_ -> do
                     liftIO $ writeIORef probRef None
@@ -102,8 +100,8 @@ setOnClick gridRef stateRef probRef probText = do
                     flagCell i gridRef stateRef probText
 
 
-changeDifficulty :: IORef Difficulty -> IORef GameState -> IORef Grid -> IORef ProbableMove -> Window -> Element -> Element -> Element -> Element -> [Element] -> UI ()
-changeDifficulty difficultyRef stateRef gridRef probRef window gridContainer probText bombCounter difficultyButton squares = do
+changeDifficulty :: IORef Difficulty -> IORef GameState -> IORef Grid -> Window -> Element -> Element -> Element -> [Element] -> UI ()
+changeDifficulty difficultyRef stateRef gridRef window gridContainer bombCounter difficultyButton squares = do
     gameState <- liftIO $ readIORef stateRef
     case gameState of
         -- only allow changing difficulty at the start of the game
@@ -128,7 +126,7 @@ changeDifficulty difficultyRef stateRef gridRef probRef window gridContainer pro
 
             -- update the grid and re-set the click handlers
             liftIO $ modifyIORef gridRef (updateGrid size squares)
-            setOnClick gridRef stateRef probRef probText
+            -- setOnClick gridRef stateRef probRef probText
             -- place the grid on the page
             element gridContainer #+ [element newUiGrid]
             return ()
