@@ -11,11 +11,10 @@ import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import qualified Data.Vector as V
 import Data.List (partition, nub, groupBy, sortBy, minimumBy, find, union, (\\))
 import Data.Function (on)
-import Data.Ord (comparing, Down (Down))
+import Data.Ord (comparing)
 import Data.Ratio ((%))
 import Control.Concurrent (threadDelay, forkIO, newEmptyMVar, putMVar, takeMVar)
 import qualified Data.Set as S
-import Data.Vector (uncons)
 
 
 -- figures out next move and performs it if completely safe

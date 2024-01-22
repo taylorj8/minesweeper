@@ -13,7 +13,6 @@ import Graphics.UI.Threepenny.Core as C
 import qualified Data.Vector as V
 import Data.IORef (IORef, newIORef, readIORef, writeIORef, modifyIORef)
 import Control.Monad (replicateM, when)
-import Control.Concurrent
 import Data.Maybe (maybe)
 
 
