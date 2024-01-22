@@ -64,7 +64,7 @@ solve gridRef stateRef currentRef moveRef probText = do
                                         return False
                     -- uncertain/naive moves from last turn are taken here
                     -- also certain moves if more than one found
-                    _ -> takeProbableMove gridRef stateRef moveRef currentRef probText
+                    _ -> takeMove gridRef stateRef moveRef currentRef probText
         _ -> return False
 
 
@@ -171,8 +171,8 @@ matchCellPatterns c1 grid s1 cell = case cell of
 
 -- check the probability list and perform the move inside
 -- could be a safe or unsafe move
-takeProbableMove :: IORef Grid -> IORef GameState -> IORef Move -> IORef Int -> Element -> UI Bool
-takeProbableMove gridRef stateRef moveRef currentRef probText = do
+takeMove :: IORef Grid -> IORef GameState -> IORef Move -> IORef Int -> Element -> UI Bool
+takeMove gridRef stateRef moveRef currentRef probText = do
     probList <- liftIO $ readIORef moveRef
     case probList of
         -- contains list of guaranteed bombs and safe cells
@@ -300,7 +300,7 @@ getProbableMove remainingBombs (frontierCells, neighbourCells, numOthers) =
         -- generate all possible valid arrangements using backtracking
         arrangements <- findValidArrangements frontierCells remainingBombs neighbourCells
         -- calculate probability of each cell containing a bomb
-        return $ toProbList frontierCells $ calculateProbabilities arrangements remainingBombs numOthers
+        return $ probToMove frontierCells $ calculateProbabilities arrangements remainingBombs numOthers
 
 
 -- find all possible valid arrangements of bombs
@@ -383,8 +383,8 @@ calculateProbabilities arrangements remainingBombs numOthers = do
 -- takes in list of indexes to probabilities
 -- partition out the guaranteed bombs
 -- any cells that don't appear in the list are safe
-toProbList :: [Int] -> [(Int, Rational)] -> Move
-toProbList frontierCells probs = do
+probToMove :: [Int] -> [(Int, Rational)] -> Move
+probToMove frontierCells probs = do
     let safe = filter (`notElem` map fst probs) frontierCells
     let (bombs, uncertain) = partition ((==1.0) . snd) probs
     case (bombs, safe, uncertain) of
