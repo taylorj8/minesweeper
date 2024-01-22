@@ -80,7 +80,7 @@ autoSolve gridRef stateRef currentRef moveRef (probText, autoButton) = do
             -- allows player to choose whether to take chance
             continue <- solve gridRef stateRef currentRef moveRef probText
             if continue then do
-                liftIO $ threadDelay 10000  -- delay for dramatic effect
+                -- liftIO $ threadDelay 10000  -- delay for dramatic effect
                 autoSolve' gridRef stateRef currentRef moveRef
             else do
                 -- unhighlight button to show stop
@@ -327,21 +327,16 @@ findValidArrangements availableCells remainingBombs frontierNeighbours = do
         -- once deeper than that, overhead of spawning thread greater than benefit
         findValidArrs (current : rest) remainingBombs currentArrangement remainingThreads
             | isValidSubArrangement currentArrangement = do
-                -- mvars to store partial results
-                resInclude <- newEmptyMVar
-                resExclude <- newEmptyMVar
+                partialRes <- newEmptyMVar
                 -- new fork for branch that includes current
                 forkIO $ do
                     res <- findValidArrs rest (remainingBombs-1) (current : currentArrangement) (remainingThreads-1)
-                    putMVar resInclude res
-                -- new fork for branch that excludes current
-                forkIO $ do
-                    res <- findValidArrs rest remainingBombs currentArrangement (remainingThreads-1)
-                    putMVar resExclude res
-                -- once both have returned results, concatenate them
-                r1 <- takeMVar resInclude
-                r2 <- takeMVar resExclude
-                return (r1 ++ r2)
+                    putMVar partialRes res
+                -- use current thread for branch that excludes current
+                resExclude <- findValidArrs rest remainingBombs currentArrangement (remainingThreads-1)
+                -- once other thread finishes, combine results
+                resInclude <- takeMVar partialRes
+                return (resInclude ++ resExclude)
             | otherwise = return [tail currentArrangement]
         -- count the number of bombs in an arrangement and compare to n of each cell
         -- a subarrangement is valid if too many bombs aren't placed beside any neighbour cell
