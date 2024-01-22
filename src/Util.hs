@@ -117,21 +117,21 @@ middleIndex (Grid n _ _) = case n `mod` 2 of
  -- Certain has list of guaranteed bombs to flag and guaranteed safe cells
  -- Uncertain and Naive contain cell with lowest probability of a bomb
  -- Naive may be inaccurate
-data ProbableMove
+data Move
     = Certain ([Int], [Int])
     | Uncertain (Int, Rational)
     | Naive (Int, Float)
     | None
     deriving Show
 
--- determines how to combine probable moves
+-- determines how to combine moves
 -- given two Certains, union their lists
 -- given Certain and any other, take the certain
 -- given two Uncertains, take the lowest probability
 -- given Uncertain and anything else, take Uncertain
 -- Naive is similar to Uncertain
 -- given none, always take other option
-combineProbs :: [ProbableMove] -> ProbableMove
+combineProbs :: [Move] -> Move
 combineProbs [] = None
 combineProbs (head : rest) = foldl concatProbableMoves' head rest
     where
@@ -151,9 +151,14 @@ combineProbs (head : rest) = foldl concatProbableMoves' head rest
             (None, x) -> x
 
 
--- contains number of unflagged bombs and set of neighbouring frontier cells
+-- contains index, number of unflagged bombs and set of neighbouring frontier cells
 -- set used for O(logN) lookup
-type NeighbourCell = (Int, S.Set Int)
+type NeighbourCell = (Int, Int, S.Set Int)
+
+-- filter list of neighbours to list only containing cells with passed indices
+filterByIndexes :: [NeighbourCell] -> [Int] -> [NeighbourCell]
+filterByIndexes cells indexes = filter (\(i, _, _) -> i `elem` indexes) cells
+
 
 -- possible arrangement of bombs
 type Arrangement = [Int]
@@ -164,24 +169,36 @@ type Arrangement = [Int]
 -- Int is number of hidden cells not on the frontier
 type Frontier = ([Int], [NeighbourCell], Int)
 
+-- getter functions for 3-tuples
+getFst :: (a, b, c) -> a
+getFst (a, _, _) = a
+
+getSnd :: (a, b, c) -> b
+getSnd (_, b, _) = b
+
+getThr :: (a, b, c) -> c
+getThr (_, _, c) = c
 
 -- contains the grid size and number of bombs
 data Difficulty
     = Easy (Int, Int)
     | Medium (Int, Int)
     | Hard (Int, Int)
+    | Impossible (Int, Int)
 
 instance Show Difficulty where
     show (Easy _) = "Easy"
     show (Medium _) = "Medium"
     show (Hard _) = "Hard"
+    show (Impossible _) = "Impossible"
 
 -- cycle through difficulties
 change :: Difficulty -> Difficulty
 change difficulty = case difficulty of
     Easy _ -> Medium (16, 40)
     Medium _ -> Hard (22, 99)
-    Hard _ -> Easy (9, 10)
+    Hard _ -> Impossible (30, 200)
+    Impossible _ -> Easy (9, 10)
 
 -- get the difficulty parameters
 getParams :: Difficulty -> (Int, Int)
@@ -189,6 +206,7 @@ getParams difficulty = case difficulty of
     Easy params -> params
     Medium params -> params
     Hard params -> params
+    Impossible params -> params
 
 -- get the color of the button at each difficulty
 getColor :: Difficulty -> String
@@ -196,7 +214,4 @@ getColor difficulty = case difficulty of
     Easy _ -> "palegreen"
     Medium _ -> "PaleTurquoise"
     Hard _ -> "lightcoral"
-
--- get first element of 3-tuple
-getFst :: (a, b, c) -> a
-getFst (a, _, _) = a
+    Impossible _ -> "red"

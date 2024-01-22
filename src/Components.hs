@@ -73,13 +73,13 @@ makeDifficultyButton :: UI Element
 makeDifficultyButton = UI.div 
     # set UI.text "Medium"
     # set UI.style [
-        ("width", "84px"),
+        ("width", "92px"),
         ("height", "34px"),
         ("line-height", "34px"),
         ("border", "1px solid black"),
         ("font-size", "18px"),
         ("vertical-align", "middle"),
-        ("margin", "0px 30px"),
+        ("margin", "0px 31px"),
         ("border-radius", "5px"),
         ("position", "relative"), 
         ("top", "-1px")
@@ -95,6 +95,8 @@ makeProbText = UI.div
             ("font-size", "18px"),
             ("font-family", "Trebuchet MS"),
             ("user-select", "none"),
+            ("vertical-align", "top"),
+            ("display", "inline-block"),
             ("color", "whitesmoke")
         ]
 
