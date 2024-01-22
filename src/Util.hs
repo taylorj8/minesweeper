@@ -117,21 +117,21 @@ middleIndex (Grid n _ _) = case n `mod` 2 of
  -- Certain has list of guaranteed bombs to flag and guaranteed safe cells
  -- Uncertain and Naive contain cell with lowest probability of a bomb
  -- Naive may be inaccurate
-data ProbableMove
+data Move
     = Certain ([Int], [Int])
     | Uncertain (Int, Rational)
     | Naive (Int, Float)
     | None
     deriving Show
 
--- determines how to combine probable moves
+-- determines how to combine moves
 -- given two Certains, union their lists
 -- given Certain and any other, take the certain
 -- given two Uncertains, take the lowest probability
 -- given Uncertain and anything else, take Uncertain
 -- Naive is similar to Uncertain
 -- given none, always take other option
-combineProbs :: [ProbableMove] -> ProbableMove
+combineProbs :: [Move] -> Move
 combineProbs [] = None
 combineProbs (head : rest) = foldl concatProbableMoves' head rest
     where

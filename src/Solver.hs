@@ -20,8 +20,8 @@ import Data.Vector (uncons)
 
 -- figures out next move and performs it if completely safe
 -- return true if a move was performed
-solve :: IORef Grid -> IORef GameState -> IORef Int -> IORef ProbableMove -> Element -> UI Bool
-solve gridRef stateRef currentRef probRef probText = do
+solve :: IORef Grid -> IORef GameState -> IORef Int -> IORef Move -> Element -> UI Bool
+solve gridRef stateRef currentRef moveRef probText = do
     gameState <- liftIO $ readIORef stateRef
     grid <- liftIO $ readIORef gridRef
     case gameState of
@@ -35,19 +35,19 @@ solve gridRef stateRef currentRef probRef probText = do
                 clickRemaining gridRef stateRef currentRef probText
                 return True
             else do
-                probs <- liftIO $ readIORef probRef
+                probs <- liftIO $ readIORef moveRef
                 case probs of
                     -- if no probabilistic move calculated follow logic rules
                     None -> do
-                        move <- logicSolve gridRef stateRef probRef currentRef probText
-                        case move of
-                            Certain guaranteedCells -> takeCertainMove gridRef stateRef probRef probText guaranteedCells
+                        logicalMove <- findLogicalMove gridRef stateRef currentRef
+                        case logicalMove of
+                            Certain guaranteedCells -> takeCertainMove gridRef stateRef moveRef probText guaranteedCells
                             _ -> do
                                 -- if logical move can't be found, calculate probabilistic move
                                 element probText # set UI.text "Calculating"
-                                probList <- liftIO $ findProbableMove grid bombsRemaining
-                                liftIO $ writeIORef probRef probList
-                                case probList of
+                                probableMove <- liftIO $ findProbableMove grid bombsRemaining
+                                liftIO $ writeIORef moveRef probableMove
+                                case probableMove of
                                     -- if move found is uncertain or naive, show probability but don't take move
                                     -- move is taken on next solve
                                     Uncertain (_, prob) -> do
@@ -59,30 +59,30 @@ solve gridRef stateRef currentRef probRef probText = do
                                     -- otherwise make move
                                     Certain guaranteedCells -> do
                                         element probText # set UI.text ""
-                                        takeCertainMove gridRef stateRef probRef probText guaranteedCells
+                                        takeCertainMove gridRef stateRef moveRef probText guaranteedCells
                                     _ -> do
                                         element probText # set UI.text "None"
                                         return False
                     -- uncertain/naive moves from last turn are taken here
                     -- also certain moves if more than one found
-                    _ -> takeProbableMove gridRef stateRef probRef currentRef probText
+                    _ -> takeProbableMove gridRef stateRef moveRef currentRef probText
         _ -> return False
 
 
 -- repeatedly call solve until no remaining moves
-autoSolve :: IORef Grid -> IORef GameState -> IORef Int -> IORef ProbableMove -> (Element, Element) -> UI ()
-autoSolve gridRef stateRef currentRef probRef (probText, autoButton) = do
+autoSolve :: IORef Grid -> IORef GameState -> IORef Int -> IORef Move -> (Element, Element) -> UI ()
+autoSolve gridRef stateRef currentRef moveRef (probText, autoButton) = do
     -- highlight button while auto solver running
     element autoButton # set UI.style [("background-color", "Khaki")]
-    autoSolve' gridRef stateRef currentRef probRef
+    autoSolve' gridRef stateRef currentRef moveRef
     where
-        autoSolve' gridRef stateRef currentRef probRef = do
+        autoSolve' gridRef stateRef currentRef moveRef = do
             -- repeat unless false returned, i.e. move not taken
             -- allows player to choose whether to take chance
-            continue <- solve gridRef stateRef currentRef probRef probText
+            continue <- solve gridRef stateRef currentRef moveRef probText
             if continue then do
                 -- liftIO $ threadDelay 75000  -- delay for dramatic effect
-                autoSolve' gridRef stateRef currentRef probRef
+                autoSolve' gridRef stateRef currentRef moveRef
             else do
                 -- unhighlight button to show stop
                 element autoButton # set UI.style [("background-color", "lightgrey")]
@@ -105,12 +105,13 @@ clickRemaining gridRef stateRef currentRef probText = do
                 _ -> clickRemaining' (index' + 1)
 
 
--- try to find a move based on simple logic rules
--- any moves found are always safe
-logicSolve :: IORef Grid -> IORef GameState -> IORef ProbableMove -> IORef Int -> Element -> UI ProbableMove
-logicSolve gridRef stateRef probRef currentRef probText = do
-    current <- liftIO $ readIORef currentRef
+-- try to find a move based on logic rules
+-- any moves found are always certain
+findLogicalMove :: IORef Grid -> IORef GameState -> IORef Int-> UI Move
+findLogicalMove gridRef stateRef currentRef = do
     grid <- liftIO $ readIORef gridRef
+    current <- liftIO $ readIORef currentRef
+    -- recursively apply rules to each cell
     applyRules grid current 0
     where
         applyRules grid cur iterations = do
@@ -128,109 +129,93 @@ logicSolve gridRef stateRef probRef currentRef probText = do
                     let hiddenCells = map index $ filter (stateIs Hidden) neighbours
                     let numRemaining = num - length (filter (stateIs Flagged) neighbours)
 
-                    -- two basic rules (explained in report)
-                    -- if neither apply or cell already has all cells revealed try next cell 
+                    -- two basic rules acting on single cells explained in report)
                     if null hiddenCells then applyRules grid (current+1) (iterations+1)
                     else if numRemaining == 0 then returnCertain hiddenCells current True
                     else if numRemaining == length hiddenCells then returnCertain hiddenCells current False
+                    -- more complex rules acting on pairs of cells (current cell with each of its neighbours)
                     else if numRemaining == 1 then do
                         let (frontier, neighbours) = getFrontier grid i
-                        case combineProbs $ map (findSafeCells grid frontier) neighbours of
+                        case combineProbs $ map (matchCellPatterns grid frontier) neighbours of
                             Certain x -> do
-                                liftIO $ print x
                                 liftIO $ writeIORef currentRef current
                                 return $ Certain x
                             _ -> applyRules grid (current+1) (iterations+1)
+                    -- if none apply, try next cell
                     else applyRules grid (current+1) (iterations+1)
-
                 _ -> applyRules grid (current+1) (iterations+1)
         -- make the supplied move and save the current cell index for next time solve button clicked
         returnCertain hiddenCells current safe = do
             liftIO $ writeIORef currentRef current
             if safe then return $ Certain ([], hiddenCells) else return $ Certain (hiddenCells, [])
+        -- function to get a cell's revealed and hidden neighbours
         getFrontier grid i =
             let (frontier, neighbours) = partition (stateIs Hidden) $ filter (not . stateIs Flagged) $ getNeighbours grid i
             in (S.fromList $ map index frontier, neighbours)
 
 
-findSafeCells :: Grid -> S.Set Int -> Cell -> ProbableMove
-findSafeCells grid s1 cell = case cell of
+-- attempts to find patterns in pairs of cells
+matchCellPatterns :: Grid -> S.Set Int -> Cell -> Move
+matchCellPatterns grid s1 cell = case cell of
     (Cell i _ _ (Empty num)) -> do
+        -- get neighbours of current cell
         let neighbours = getNeighbours grid i
+        -- get a set of hidden neighbours
         let s2 = S.fromList $ map index $ filter (stateIs Hidden) neighbours
-        let numRemaining = num - length (filter (stateIs Flagged) neighbours)
-        if s1 `S.isProperSubsetOf` s2
-        then let diff = S.toList $ S.difference s2 s1 in
-            case (numRemaining, length diff) of
-            (1, _) -> Certain ([], diff)
-            (n, m) | n == m+1 -> Certain (diff, [])
-            _ -> None
-        else None
+        let diff = s2 `S.difference` s1
+        -- number - flagged neighbours is its effective number for pattern matching
+        -- two rules - explained in report
+        case num - length (filter (stateIs Flagged) neighbours) of
+            1 -> if s1 `S.isProperSubsetOf` s2 then Certain ([], S.toList diff) else None
+            n -> if S.size diff == n-1 then Certain (S.toList diff, []) else None
     _ -> None
 
 
--- patternSolve :: Grid -> NeighbourCell -> IO ProbableMove
--- patternSolve grid cell = do
---     case cell of
---         (index, 1, frontierCells) -> do
---             let neighbours = neighbourCells `filterByIndexes` findNeighbours index (size grid)
---             return $ combineProbs $ map (findSafeCells frontierCells) neighbours
---         _ -> return None
---     where
---         findSafeCells :: S.Set Int -> NeighbourCell -> ProbableMove
---         findSafeCells s1 (_, num, s2) = if s1 `S.isProperSubsetOf` s2
---             then let diff = S.toList $ S.difference s2 s1 in
---                 case (num, length diff) of
---                 (1, _) -> Certain ([], diff)
---                 (n, m) | n == m+1 -> Certain (diff, [])
---                 _ -> None
---             else None
-
 -- check the probability list and perform the move inside
 -- could be a safe or unsafe move
-takeProbableMove :: IORef Grid -> IORef GameState -> IORef ProbableMove -> IORef Int -> Element -> UI Bool
-takeProbableMove gridRef stateRef probRef currentRef probText = do
-    probList <- liftIO $ readIORef probRef
+takeProbableMove :: IORef Grid -> IORef GameState -> IORef Move -> IORef Int -> Element -> UI Bool
+takeProbableMove gridRef stateRef moveRef currentRef probText = do
+    probList <- liftIO $ readIORef moveRef
     case probList of
         -- contains list of guaranteed bombs and safe cells
-        Certain guaranteedCells -> takeCertainMove gridRef stateRef probRef probText guaranteedCells
+        Certain guaranteedCells -> takeCertainMove gridRef stateRef moveRef probText guaranteedCells
         -- both below contain the safest cell found from unsafe options
         -- click it and update IORef
         Uncertain (safest, prob) -> do
             -- safest is -1 if there was no frontier, i.e. no information about remaining cells
             if safest == -1 then clickRemaining gridRef stateRef currentRef probText
             else clickCell safest gridRef stateRef probText
-            liftIO $ writeIORef probRef None
+            liftIO $ writeIORef moveRef None
             return True
         Naive (safest, prob) -> do
             clickCell safest gridRef stateRef probText
-            liftIO $ writeIORef probRef None
+            liftIO $ writeIORef moveRef None
             return True
         _ -> return False
 
 
 -- makes a move from list of certain moves
-takeCertainMove :: IORef Grid -> IORef GameState -> IORef ProbableMove -> Element -> ([Int], [Int]) -> UI Bool
-takeCertainMove gridRef stateRef probRef probText guaranteedCells = case guaranteedCells of
+takeCertainMove :: IORef Grid -> IORef GameState -> IORef Move -> Element -> ([Int], [Int]) -> UI Bool
+takeCertainMove gridRef stateRef moveRef probText guaranteedCells = case guaranteedCells of
     -- flag cell if guaranteed bomb in list
     (flag : rest, safes) -> do
         flagCell flag gridRef stateRef probText
         -- if both empty replace with None
-        if null rest && null safes then liftIO $ writeIORef probRef None
-        else liftIO $ writeIORef probRef $ Certain (rest, safes)
+        if null rest && null safes then liftIO $ writeIORef moveRef None
+        else liftIO $ writeIORef moveRef $ Certain (rest, safes)
         return True
     -- click cell if guaranteed safe cell in list
     ([], safe : rest) -> do
         clickCell safe gridRef stateRef probText
         -- if both empty replace with None
-        if null rest then liftIO $ writeIORef probRef None
-        else liftIO $ writeIORef probRef $ Certain ([], rest)
+        if null rest then liftIO $ writeIORef moveRef None
+        else liftIO $ writeIORef moveRef $ Certain ([], rest)
         return True
     _ -> return False
 
 
 -- find a probable move
-findProbableMove :: Grid -> Int -> IO ProbableMove
+findProbableMove :: Grid -> Int -> IO Move
 findProbableMove grid bombsRemaining = do
     -- get the frontier cells, their neighbours and the number of remaining hidden cells
     let (frontierCells, frontierNeighbours, numOthers) = getFrontier grid
@@ -313,7 +298,7 @@ convertCells frontierNeighbours grid frontierCells = map convertCell frontierNei
 
 
 -- given a frontier, get the safest 
-getProbableMove :: Int -> Frontier -> IO ProbableMove
+getProbableMove :: Int -> Frontier -> IO Move
 getProbableMove remainingBombs (frontierCells, neighbourCells, numOthers) =
     if length frontierCells > 32 && remainingBombs > 12 then return $ Naive $ getNaiveGuess neighbourCells
     else do
@@ -408,7 +393,7 @@ calculateProbabilities arrangements remainingBombs numOthers = do
 -- takes in list of indexes to probabilities
 -- partition out the guaranteed bombs
 -- any cells that don't appear in the list are safe
-toProbList :: [Int] -> [(Int, Rational)] -> ProbableMove
+toProbList :: [Int] -> [(Int, Rational)] -> Move
 toProbList frontierCells probs = do
     let safe = filter (`notElem` map fst probs) frontierCells
     let (bombs, uncertain) = partition ((==1.0) . snd) probs
