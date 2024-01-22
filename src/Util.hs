@@ -155,10 +155,10 @@ combineProbs (head : rest) = foldl concatProbableMoves' head rest
 -- set used for O(logN) lookup
 type NeighbourCell = (Int, Int, S.Set Int)
 
--- get a neighbour cell by index
-getByIndex :: [NeighbourCell] -> Int -> NeighbourCell
-getByIndex [] _ = error "Index not found"
-getByIndex (x:xs) index = if getFst x == index then x else getByIndex xs index
+-- filter list of neighbours to list only containing cells with passed indices
+filterByIndexes :: [NeighbourCell] -> [Int] -> [NeighbourCell]
+filterByIndexes cells indexes = filter (\(i, _, _) -> i `elem` indexes) cells
+
 
 data Direction 
     = North 
