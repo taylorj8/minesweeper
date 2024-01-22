@@ -81,7 +81,7 @@ autoSolve gridRef stateRef currentRef moveRef (probText, autoButton) = do
             -- allows player to choose whether to take chance
             continue <- solve gridRef stateRef currentRef moveRef probText
             if continue then do
-                -- liftIO $ threadDelay 75000  -- delay for dramatic effect
+                liftIO $ threadDelay 10000  -- delay for dramatic effect
                 autoSolve' gridRef stateRef currentRef moveRef
             else do
                 -- unhighlight button to show stop
@@ -134,15 +134,14 @@ findLogicalMove gridRef stateRef currentRef = do
                     else if numRemaining == 0 then returnCertain hiddenCells current True
                     else if numRemaining == length hiddenCells then returnCertain hiddenCells current False
                     -- more complex rules acting on pairs of cells (current cell with each of its neighbours)
-                    else if numRemaining == 1 then do
-                        let (frontier, neighbours) = getFrontier grid i
-                        case combineProbs $ map (matchCellPatterns grid frontier) neighbours of
+                    else 
+                        let (frontier, neighbours) = getFrontier grid i in
+                        case combineProbs $ map (matchCellPatterns numRemaining grid frontier) neighbours of
                             Certain x -> do
                                 liftIO $ writeIORef currentRef current
                                 return $ Certain x
+                            -- if none apply, try next cell
                             _ -> applyRules grid (current+1) (iterations+1)
-                    -- if none apply, try next cell
-                    else applyRules grid (current+1) (iterations+1)
                 _ -> applyRules grid (current+1) (iterations+1)
         -- make the supplied move and save the current cell index for next time solve button clicked
         returnCertain hiddenCells current safe = do
@@ -155,8 +154,8 @@ findLogicalMove gridRef stateRef currentRef = do
 
 
 -- attempts to find patterns in pairs of cells
-matchCellPatterns :: Grid -> S.Set Int -> Cell -> Move
-matchCellPatterns grid s1 cell = case cell of
+matchCellPatterns :: Int -> Grid -> S.Set Int -> Cell -> Move
+matchCellPatterns c1 grid s1 cell = case cell of
     (Cell i _ _ (Empty num)) -> do
         -- get neighbours of current cell
         let neighbours = getNeighbours grid i
@@ -164,10 +163,10 @@ matchCellPatterns grid s1 cell = case cell of
         let s2 = S.fromList $ map index $ filter (stateIs Hidden) neighbours
         let diff = s2 `S.difference` s1
         -- number - flagged neighbours is its effective number for pattern matching
-        -- two rules - explained in report
+        -- two rules (explained in report)
         case num - length (filter (stateIs Flagged) neighbours) of
             1 -> if s1 `S.isProperSubsetOf` s2 then Certain ([], S.toList diff) else None
-            n -> if S.size diff == n-1 then Certain (S.toList diff, []) else None
+            c2 -> if S.size diff == c2-c1 && (not . S.null) diff then Certain (S.toList diff, []) else None
     _ -> None
 
 
@@ -226,12 +225,9 @@ findProbableMove grid bombsRemaining = do
     else do
         let neighbourCells = convertCells frontierNeighbours grid frontierCells
         -- too many cells, generating all possible arrangments would take too long so make a naive guess
-        -- print $ length frontierCells
         let frontiers = separateFrontiers neighbourCells numOthers (length neighbourCells)
-        -- print $ map (length . getFst) frontiers
-        -- probabilities <- mapM (getProbableMove bombsRemaining) frontiers
-        -- return $ combineProbs probabilities
-        return None
+        probabilities <- mapM (getProbableMove bombsRemaining) frontiers
+        return $ combineProbs probabilities
 
 
 -- get indices of frontier cells along with number of other hidden cells

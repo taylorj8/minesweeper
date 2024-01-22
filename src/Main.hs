@@ -37,7 +37,7 @@ setup window = do
     -- restart button left out as it is never changed
     title <- makeTitle
     bombCounter <- topCell (show numBombs)
-    squares <- replicateM 484 uiCell -- enough squares for all difficulties
+    squares <- replicateM 900 uiCell -- enough squares for all difficulties
     gridRef <- liftIO $ newIORef $ emptyGrid size (title, bombCounter) squares
 
     -- set up IORefs for solver

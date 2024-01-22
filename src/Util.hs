@@ -160,24 +160,6 @@ filterByIndexes :: [NeighbourCell] -> [Int] -> [NeighbourCell]
 filterByIndexes cells indexes = filter (\(i, _, _) -> i `elem` indexes) cells
 
 
-data Direction 
-    = North 
-    | South 
-    | East 
-    | West
-    | Diagonal
-    deriving Eq
-
-getDirection :: Int -> Int -> Int -> Direction
-getDirection n index neighbourIndex
-    | neighbourIndex == index - n = North
-    | neighbourIndex == index + n = South
-    | neighbourIndex == index + 1 = East
-    | neighbourIndex == index - 1 = West
-    | otherwise = Diagonal
-
-
-
 -- possible arrangement of bombs
 type Arrangement = [Int]
 
@@ -202,18 +184,21 @@ data Difficulty
     = Easy (Int, Int)
     | Medium (Int, Int)
     | Hard (Int, Int)
+    | Impossible (Int, Int)
 
 instance Show Difficulty where
     show (Easy _) = "Easy"
     show (Medium _) = "Medium"
     show (Hard _) = "Hard"
+    show (Impossible _) = "Impossible"
 
 -- cycle through difficulties
 change :: Difficulty -> Difficulty
 change difficulty = case difficulty of
     Easy _ -> Medium (16, 40)
     Medium _ -> Hard (22, 99)
-    Hard _ -> Easy (9, 10)
+    Hard _ -> Impossible (30, 200)
+    Impossible _ -> Easy (9, 10)
 
 -- get the difficulty parameters
 getParams :: Difficulty -> (Int, Int)
@@ -221,6 +206,7 @@ getParams difficulty = case difficulty of
     Easy params -> params
     Medium params -> params
     Hard params -> params
+    Impossible params -> params
 
 -- get the color of the button at each difficulty
 getColor :: Difficulty -> String
@@ -228,3 +214,4 @@ getColor difficulty = case difficulty of
     Easy _ -> "palegreen"
     Medium _ -> "PaleTurquoise"
     Hard _ -> "lightcoral"
+    Impossible _ -> "red"
