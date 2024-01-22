@@ -61,9 +61,9 @@ countNeighbours i (Grid n _ cells) = length $ filter isBomb neighbours
 -- given an index, return the indices of the surrounding cells
 -- only real disadvantage caused by using 1D representation
 findNeighbours :: Int -> Int -> [Int]
-findNeighbours index n = handleEdges [index - n-1, index - n, index - n+1, index - 1, index + 1, index + n-1, index + n, index + n+1]
+findNeighbours i n = handleEdges [i - n-1, i - n, i - n+1, i - 1, i + 1, i + n-1, i + n, i + n+1]
     where
-        handleEdges = filter (\x -> x >= 0 && x < n*n && abs (x `mod` n - index `mod` n) <= 1)
+        handleEdges = filter (\x -> x >= 0 && x < n*n && abs (x `mod` n - i `mod` n) <= 1)
         -- handles the case of edge cells
         -- if neigbour is out of bounds, remove it
         -- if neighbour is more than one column away, remove it
@@ -147,7 +147,6 @@ clickCell index gridRef stateRef probText = do
             liftIO $ writeIORef stateRef $ Playing (n*n - numBombs, numBombs)
             seed <- liftIO sysTime
             -- liftIO $ print seed
-            -- hard seed: 17059426898
             liftIO $ modifyIORef gridRef $ resetGrid numBombs index seed
             revealCells index gridRef stateRef
         -- when in game

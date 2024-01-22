@@ -73,15 +73,15 @@ autoSolve :: IORef Grid -> IORef GameState -> IORef Int -> IORef Move -> (Elemen
 autoSolve gridRef stateRef currentRef moveRef (probText, autoButton) = do
     -- highlight button while auto solver running
     element autoButton # set UI.style [("background-color", "Khaki")]
-    autoSolve' gridRef stateRef currentRef moveRef
+    autoSolve'
     where
-        autoSolve' gridRef stateRef currentRef moveRef = do
+        autoSolve' = do
             -- repeat unless false returned, i.e. move not taken
             -- allows player to choose whether to take chance
             continue <- solve gridRef stateRef currentRef moveRef probText
             if continue then do
-                -- liftIO $ threadDelay 10000  -- delay for dramatic effect
-                autoSolve' gridRef stateRef currentRef moveRef
+                liftIO $ threadDelay 5000  -- delay for dramatic effect
+                autoSolve'
             else do
                 -- unhighlight button to show stop
                 element autoButton # set UI.style [("background-color", "lightgrey")]
