@@ -131,9 +131,9 @@ data Move
 -- given Uncertain and anything else, take Uncertain
 -- Naive is similar to Uncertain
 -- given none, always take other option
-combineProbs :: [Move] -> Move
-combineProbs [] = None
-combineProbs (head : rest) = foldl concatProbableMoves' head rest
+combineMoves :: [Move] -> Move
+combineMoves [] = None
+combineMoves (head : rest) = foldl concatProbableMoves' head rest
     where
         concatProbableMoves' m1 m2 = case (m1, m2) of
             (Certain (b1, s1), Certain (b2, s2)) -> Certain ( b1 `union` b2,  s1 `union` s2)

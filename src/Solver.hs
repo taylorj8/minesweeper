@@ -9,7 +9,7 @@ import qualified Graphics.UI.Threepenny as UI
 import Graphics.UI.Threepenny.Core hiding (on)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import qualified Data.Vector as V
-import Data.List (partition, nub, groupBy, sortBy, minimumBy, find, union, (\\))
+import Data.List (partition, nub, groupBy, sortBy, minimumBy, find, union, (\\), maximumBy)
 import Data.Function (on)
 import Data.Ord (comparing)
 import Data.Ratio ((%))
@@ -80,7 +80,7 @@ autoSolve gridRef stateRef currentRef moveRef (probText, autoButton) = do
             -- allows player to choose whether to take chance
             continue <- solve gridRef stateRef currentRef moveRef probText
             if continue then do
-                liftIO $ threadDelay 5000  -- delay for dramatic effect
+                -- liftIO $ threadDelay 5000  -- delay for dramatic effect
                 autoSolve'
             else do
                 -- unhighlight button to show stop
@@ -133,9 +133,9 @@ findLogicalMove gridRef stateRef currentRef = do
                     else if numRemaining == 0 then returnCertain hiddenCells current True
                     else if numRemaining == length hiddenCells then returnCertain hiddenCells current False
                     -- more complex rules acting on pairs of cells (current cell with each of its neighbours)
-                    else 
+                    else
                         let (frontier, neighbours) = getFrontier grid i in
-                        case combineProbs $ map (matchCellPatterns numRemaining grid frontier) neighbours of
+                        case combineMoves $ map (matchCellPatterns numRemaining grid frontier) neighbours of
                             Certain x -> do
                                 liftIO $ writeIORef currentRef current
                                 return $ Certain x
@@ -152,6 +152,7 @@ findLogicalMove gridRef stateRef currentRef = do
             in (S.fromList $ map index frontier, neighbours)
 
 
+-- todo try further neighbours
 -- attempts to find patterns in pairs of cells
 matchCellPatterns :: Int -> Grid -> S.Set Int -> Cell -> Move
 matchCellPatterns c1 grid s1 cell = case cell of
@@ -216,7 +217,8 @@ takeCertainMove gridRef stateRef moveRef probText guaranteedCells = case guarant
 findProbableMove :: Grid -> Int -> IO Move
 findProbableMove grid bombsRemaining = do
     -- get the frontier cells, their neighbours and the number of remaining hidden cells
-    let (frontierCells, frontierNeighbours, numOthers) = getFrontier grid
+    let (frontierCells, frontierNeighbours, others) = getFrontier grid
+    let numOthers = length others
     -- if no frontier cells then no information about any cells
     -- in this case probability is just remaining bombs / remaining cells
     -- -1 tells solver to click first cell
@@ -225,14 +227,46 @@ findProbableMove grid bombsRemaining = do
         let neighbourCells = convertCells frontierNeighbours grid frontierCells
         -- too many cells, generating all possible arrangments would take too long so make a naive guess
         let frontiers = separateFrontiers neighbourCells numOthers (length neighbourCells)
-        probabilities <- mapM (getProbableMove bombsRemaining) frontiers
-        return $ combineProbs probabilities
+        -- get possible move for each frontier, along with least number of bombs that could be in that frontier
+        moves <- mapM (getProbableMove bombsRemaining) frontiers
+        -- if uncertain, calculate probability of bombs in non-frontier hidden cells
+        case combineMoves $ map fst moves of
+            Certain x -> return $ Certain x
+            Uncertain (cell, prob) -> calculateOtherProb moves frontierCells others cell prob
+            Naive (cell, prob) -> calculateOtherProb moves frontierCells others cell (realToFrac prob)
+            x -> return x
+    where
+        calculateOtherProb moves frontierCells others cell prob = let numOthers = length others in
+            if numOthers > 0 then do
+                -- leftover bombs are remaining bombs - bombs in each frontier
+                -- this is a worst-case estimate - assumes lowest number possible for each frontier
+                let leftoverBombs = bombsRemaining - sum (map snd moves)
+                let otherProb = toInteger leftoverBombs % toInteger numOthers
+                if prob <= otherProb && otherProb /= 1 then return $ Uncertain (cell, prob)
+                else do 
+                    print otherProb
+                    case otherProb of
+                        -- if probability for other cells 0 or 1, add all others to certain move
+                        0 -> return $ Certain ([], others)
+                        1 -> return $ Certain (others, [])
+                        -- if it is lower, find the best cell - cell that touches the most frontier cells
+                        -- this should give the best chance of choosing a cell that gives more information
+                        x -> do let bestCell = bestHiddenCell (size grid) others frontierCells in
+                                    return $ Uncertain (bestCell, x)
+            else return $ Uncertain (cell, prob)
+
+
+-- pick the cell that neigbours the most frontier cells
+bestHiddenCell :: Int -> [Int] -> [Int] -> Int
+bestHiddenCell n others frontierCells = maximumBy (comparing countNeighbours) others
+    where
+        countNeighbours x = length $ filter (`elem` findNeighbours x n) frontierCells
 
 
 -- get indices of frontier cells along with number of other hidden cells
 -- i.e. hidden cells with a revealed neigbhour
 -- also returns non-zero neighbours of frontier cells
-getFrontier :: Grid -> ([Int], [Cell], Int)
+getFrontier :: Grid -> ([Int], [Cell], [Int])
 getFrontier grid = do
     -- get all unvrevealed cells
     let hiddenCells = map index $ V.toList $ V.filter (stateIs Hidden) (cells grid)
@@ -240,7 +274,7 @@ getFrontier grid = do
     let (frontierIndexes, others) = partition hasRevealedNeighbour hiddenCells
     -- get all revealed cells that neighbour a frontier cell, filtering out duplicates
     let frontierNeighbours = nub . filter (stateIs Revealed) $ concatMap (getNeighbours grid) frontierIndexes
-    (frontierIndexes, frontierNeighbours, length others)
+    (frontierIndexes, frontierNeighbours, others)
     where
         hasRevealedNeighbour index = do
             -- get neighbours of a cell and return true if any are revealed
@@ -293,14 +327,15 @@ convertCells frontierNeighbours grid frontierCells = map convertCell frontierNei
 
 
 -- given a frontier, get the safest 
-getProbableMove :: Int -> Frontier -> IO Move
+getProbableMove :: Int -> Frontier -> IO (Move, Int)
 getProbableMove remainingBombs (frontierCells, neighbourCells, numOthers) =
-    if length frontierCells > 32 && remainingBombs > 12 then return $ Naive $ getNaiveGuess neighbourCells
+    if length frontierCells > 32 && remainingBombs > 12 then return (Naive $ getNaiveGuess neighbourCells, 1)
     else do
         -- generate all possible valid arrangements using backtracking
         arrangements <- findValidArrangements frontierCells remainingBombs neighbourCells
         -- calculate probability of each cell containing a bomb
-        return $ probToMove frontierCells $ calculateProbabilities arrangements remainingBombs numOthers
+        let move = probToMove frontierCells $ calculateProbabilities arrangements remainingBombs numOthers
+        return (move, minimum $ map length arrangements)
 
 
 -- find all possible valid arrangements of bombs
