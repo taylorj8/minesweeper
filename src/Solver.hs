@@ -80,7 +80,7 @@ autoSolve gridRef stateRef currentRef moveRef (probText, autoButton) = do
             -- allows player to choose whether to take chance
             continue <- solve gridRef stateRef currentRef moveRef probText
             if continue then do
-                -- liftIO $ threadDelay 5000  -- delay for dramatic effect
+                liftIO $ threadDelay 5000  -- delay for dramatic effect
                 autoSolve'
             else do
                 -- unhighlight button to show stop
@@ -108,6 +108,7 @@ clickRemaining gridRef stateRef currentRef probText = do
 -- any moves found are always certain
 findLogicalMove :: IORef Grid -> IORef GameState -> IORef Int-> UI Move
 findLogicalMove gridRef stateRef currentRef = do
+    return None
     grid <- liftIO $ readIORef gridRef
     current <- liftIO $ readIORef currentRef
     -- recursively apply rules to each cell
@@ -134,7 +135,7 @@ findLogicalMove gridRef stateRef currentRef = do
                     else if numRemaining == length hiddenCells then returnCertain hiddenCells current False
                     -- more complex rules acting on pairs of cells (current cell with each of its neighbours)
                     else
-                        let (frontier, neighbours) = getFrontier grid i in
+                        let (frontier, neighbours) = getCellsToCheck grid i in
                         case combineMoves $ map (matchCellPatterns numRemaining grid frontier) neighbours of
                             Certain x -> do
                                 liftIO $ writeIORef currentRef current
@@ -146,13 +147,14 @@ findLogicalMove gridRef stateRef currentRef = do
         returnCertain hiddenCells current safe = do
             liftIO $ writeIORef currentRef current
             if safe then return $ Certain ([], hiddenCells) else return $ Certain (hiddenCells, [])
-        -- function to get a cell's revealed and hidden neighbours
-        getFrontier grid i =
-            let (frontier, neighbours) = partition (stateIs Hidden) $ filter (not . stateIs Flagged) $ getNeighbours grid i
-            in (S.fromList $ map index frontier, neighbours)
+        -- gets all revealed cells connected to any hidden cells of a cell
+        getCellsToCheck grid i = do
+            let neighbours = getNeighbours grid i
+            let (frontier, revNeighbours) = partition (stateIs Hidden) $ filter (not . stateIs Flagged) neighbours
+            let furtherRevNeighbours = filter (stateIs Revealed) $ concatMap (getNeighbours grid . index) frontier
+            (S.fromList $ map index frontier, nub (revNeighbours ++ furtherRevNeighbours))
 
 
--- todo try further neighbours
 -- attempts to find patterns in pairs of cells
 matchCellPatterns :: Int -> Grid -> S.Set Int -> Cell -> Move
 matchCellPatterns c1 grid s1 cell = case cell of
@@ -243,9 +245,7 @@ findProbableMove grid bombsRemaining = do
                 let leftoverBombs = bombsRemaining - sum (map snd moves)
                 let otherProb = toInteger leftoverBombs % toInteger numOthers
                 if prob <= otherProb && otherProb /= 1 then return $ Uncertain (cell, prob)
-                else do 
-                    print otherProb
-                    case otherProb of
+                else case otherProb of
                         -- if probability for other cells 0 or 1, add all others to certain move
                         0 -> return $ Certain ([], others)
                         1 -> return $ Certain (others, [])
