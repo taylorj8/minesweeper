@@ -5,6 +5,31 @@ import qualified Data.Set as S
 import Graphics.UI.Threepenny.Core (Element)
 import Data.List (union)
 
+import Data.Time (getCurrentTime, nominalDiffTimeToSeconds)
+import Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
+
+
+-- system time (converted to Int) used as seed for random number generator
+sysTime :: IO Int
+sysTime = do
+    time <- getCurrentTime
+    return $ floor $ (*10) $ nominalDiffTimeToSeconds . utcTimeToPOSIXSeconds $ time
+
+
+-- return a different color based on the number of bombs
+textColor :: Int -> String
+textColor n = case n of
+    1 -> "blue"
+    2 -> "green"
+    3 -> "red"
+    4 -> "purple"
+    5 -> "maroon"
+    6 -> "turquoise"
+    7 -> "black"
+    8 -> "grey"
+    _ -> "whitesmoke"
+    
+
 -- tracks the state of the game
 -- allows click behaviour to be changed based on state
 -- GameStart state contains the number of bombs

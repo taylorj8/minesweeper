@@ -5,9 +5,8 @@ import Util
 import Graphics.UI.Threepenny.Core hiding (empty)
 import System.Random (mkStdGen, randomRs)
 import Data.List (nub, (\\))
-import Data.Time (getCurrentTime, nominalDiffTimeToSeconds)
-import Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
 import qualified Data.Vector as V
+import qualified Data.Set as S
 
 import Control.Monad (when)
 import Data.IORef (IORef, readIORef, writeIORef, modifyIORef)
@@ -18,17 +17,12 @@ import qualified Graphics.UI.Threepenny as UI
 -- randomly select numBombs indexes from a list numbers [0..n*n]
 -- nub removes duplicates from the random number stream
 -- safeCells can't have bombs - first cell revealed and its neighbours
+-- safeCells are filtered out - Set used for faster lookup
 -- ensures the grid always starts with the correct number of bombs
 randSelect :: Int -> Int -> Int -> Int -> [Int]
-randSelect n numBombs firstCell seed = take numBombs . nub . filter (`notElem` safeCells) $ randomRs (0, n*n-1) $ mkStdGen seed
+randSelect n numBombs firstCell seed = take numBombs . nub . filter (`S.notMember` safeCells) $ randomRs (0, n*n-1) $ mkStdGen seed
     where 
-        safeCells = firstCell : findNeighbours firstCell n
-
--- system time (converted to Int) used as seed for random number generator
-sysTime :: IO Int
-sysTime = do
-    time <- getCurrentTime
-    return $ floor $ (*10) $ nominalDiffTimeToSeconds . utcTimeToPOSIXSeconds $ time
+        safeCells = S.insert firstCell $ S.fromDistinctAscList $ findNeighbours firstCell n
 
 
 -- place bombs at the given indices
@@ -39,6 +33,15 @@ placeBombs (Grid n c cells) bombIndices = Grid n c (V.map placeBomb cells)
         placeBomb (Cell index square _ _) = if index `elem` bombIndices then bomb index square Hidden else empty index square Hidden 0
 
 
+-- get the neighbours of a cell and filter out the empty cells
+-- to find the number of surrounding bombs
+countNeighbours :: Int -> Grid -> Int
+countNeighbours i (Grid n _ cells) = length $ filter isBomb neighbours
+    where
+        neighbours = findNeighbours i n
+        isBomb index = cellType (cells V.! index) == Bomb
+
+
 -- for each empty cell, count the number of surrounding bombs
 countBombs :: Grid -> Grid
 countBombs grid = grid { cells = (V.map count (cells grid)) }
@@ -47,15 +50,6 @@ countBombs grid = grid { cells = (V.map count (cells grid)) }
         count (Cell i e r Bomb) = (Cell i e r Bomb)
         -- else count the bombs in surrounding cells
         count (Cell i e r (Empty _)) = empty i e r (countNeighbours i grid)
-
-
--- get the neighbours of a cell and filter out the empty cells
--- to find the number of surrounding bombs
-countNeighbours :: Int -> Grid -> Int
-countNeighbours i (Grid n _ cells) = length $ filter isBomb neighbours
-    where
-        neighbours = findNeighbours i n
-        isBomb index = cellType (cells V.! index) == Bomb
 
 
 -- given an index, return the indices of the surrounding cells
@@ -89,34 +83,6 @@ emptyGrid size bar squares = Grid size bar $ V.fromList $ map (blankCell) (zip s
         blankCell (e, i) = Cell i e Hidden (Empty 0)
 
 
--- recursive function to reveal all 0 cells
--- maintains two lists - indexes of cells to reveal and indexes to be checked
--- if a cell contains 0, get its neighbours that haven't already been checked
--- add this to both lists, recurse until no more cells to check
--- the head of the indexes to be checked is removed with each recursion
-revealIndexes :: Grid -> Int -> [Int]
-revealIndexes grid index = revealIndexes' grid [index] [index]
-    where
-        revealIndexes' grid indexes [] = indexes
-        revealIndexes' grid indexes (current : rest) = case (cells grid) V.! current of
-            Cell _ _ _ (Empty 0) -> do
-                let newNeighbours = (findNeighbours current (size grid)) \\ indexes
-                revealIndexes' grid (indexes ++ newNeighbours) (rest ++ newNeighbours)
-            otherwise -> revealIndexes' grid indexes rest
-
-
--- set cellState to Flagged if Hidden and vice versa for indices given
-toggleFlagged :: Int -> Grid -> Grid
-toggleFlagged index (Grid n c cells) = Grid n c (cells V.// [(index, toggle index)])
-    where
-        getCell i = cells V.! i
-        toggle i = let cell = cells V.! i in
-            case cellState cell of
-                Hidden -> cell { cellState = Flagged }
-                Flagged -> cell { cellState = Hidden }
-                Revealed -> cell
-
-
 -- sets cell state of cells at given indexes to Revealed
 -- counts how many were updated - needed to accurately determine win condition
 updateCells :: [Int] -> Grid -> (Grid, Int)
@@ -131,6 +97,49 @@ updateCells indexes (Grid n c cells) = do
         update cell = case cellState cell of
             Hidden -> (cell { cellState = Revealed }, 1)
             _ -> (cell, 0)
+
+
+-- handles right click
+flagCell :: Int -> IORef Grid -> IORef GameState -> Element -> UI ()
+flagCell index gridRef stateRef probText = do
+    element probText # set UI.text ""
+    gameState <- liftIO $ readIORef stateRef
+    case gameState of
+        -- change should only happen when in game
+        Playing (_, numBombs) -> do
+            grid <- liftIO $ readIORef gridRef
+            let cell = cells grid V.! index
+            -- internally toggle the cell's flag
+            liftIO $ writeIORef gridRef $ toggleFlagged index grid
+            case cellState cell of
+                -- update the UI and update the flag count
+                Hidden -> do
+                    liftIO $ modifyIORef stateRef $ updateCounter (-)
+                    element (snd $ top grid) # set UI.text (show $ numBombs-1)
+                    element (square cell) # set UI.text "🚩"
+                Flagged -> do
+                    liftIO $ modifyIORef stateRef $ updateCounter (+)
+                    element (snd $ top grid) # set UI.text (show $ numBombs+1)
+                    element (square cell) # set UI.text ""
+                _ -> element (square cell)
+            return ()
+            where
+                -- add/subtract 1 from counter
+                updateCounter op (Playing (t, c)) = Playing (t, c `op` 1)
+                updateCounter _ s = s
+        _ -> return ()
+
+
+-- set cellState to Flagged if Hidden and vice versa for indices given
+toggleFlagged :: Int -> Grid -> Grid
+toggleFlagged index (Grid n c cells) = Grid n c (cells V.// [(index, toggle index)])
+    where
+        getCell i = cells V.! i
+        toggle i = let cell = cells V.! i in
+            case cellState cell of
+                Hidden -> cell { cellState = Flagged }
+                Flagged -> cell { cellState = Hidden }
+                Revealed -> cell
 
 
 -- handles left click
@@ -198,6 +207,22 @@ revealCell grid stateRef index = do
         _ -> return square
 
 
+-- recursive function to reveal all 0 cells
+-- maintains two lists - indexes of cells to reveal and indexes to be checked
+-- if a cell contains 0, get its neighbours that haven't already been checked
+-- add this to both lists, recurse until no more cells to check
+-- the head of the indexes to be checked is removed with each recursion
+revealIndexes :: Grid -> Int -> [Int]
+revealIndexes grid index = revealIndexes' grid [index] [index]
+    where
+        revealIndexes' grid indexes [] = indexes
+        revealIndexes' grid indexes (current : rest) = case (cells grid) V.! current of
+            Cell _ _ _ (Empty 0) -> do
+                let newNeighbours = (findNeighbours current (size grid)) \\ indexes
+                revealIndexes' grid (indexes ++ newNeighbours) (rest ++ newNeighbours)
+            otherwise -> revealIndexes' grid indexes rest
+
+
 -- keeps track of how many cells remain and updates UI on win
 trackRemainingCells :: Grid -> IORef GameState -> Int -> UI ()
 trackRemainingCells grid stateRef num = do
@@ -219,37 +244,6 @@ trackRemainingCells grid stateRef num = do
             trackRemainingCells' _ state = state
 
 
--- handles right click
-flagCell :: Int -> IORef Grid -> IORef GameState -> Element -> UI ()
-flagCell index gridRef stateRef probText = do
-    element probText # set UI.text ""
-    gameState <- liftIO $ readIORef stateRef
-    case gameState of
-        -- change should only happen when in game
-        Playing (_, numBombs) -> do
-            grid <- liftIO $ readIORef gridRef
-            let cell = cells grid V.! index
-            -- internally toggle the cell's flag
-            liftIO $ writeIORef gridRef $ toggleFlagged index grid
-            case cellState cell of
-                -- update the UI and update the flag count
-                Hidden -> do
-                    liftIO $ modifyIORef stateRef $ updateCounter (-)
-                    element (snd $ top grid) # set UI.text (show $ numBombs-1)
-                    element (square cell) # set UI.text "🚩"
-                Flagged -> do
-                    liftIO $ modifyIORef stateRef $ updateCounter (+)
-                    element (snd $ top grid) # set UI.text (show $ numBombs+1)
-                    element (square cell) # set UI.text ""
-                _ -> element (square cell)
-            return ()
-            where
-                -- add/subtract 1 from counter
-                updateCounter op (Playing (t, c)) = Playing (t, c `op` 1)
-                updateCounter _ s = s
-        _ -> return ()
-
-
 -- update the UI of all bomb cells depending on game state
 fillBombs :: GameState -> V.Vector Cell -> UI ()
 fillBombs state = V.mapM_ (fillBomb state)
@@ -263,17 +257,3 @@ fillBombs state = V.mapM_ (fillBomb state)
                     # set UI.style [("background-color", "whitesmoke")]
                     # set UI.text "💣"
                 _ -> return square
-
-
--- return a different color based on the number of bombs
-textColor :: Int -> String
-textColor n = case n of
-    1 -> "blue"
-    2 -> "green"
-    3 -> "red"
-    4 -> "purple"
-    5 -> "maroon"
-    6 -> "turquoise"
-    7 -> "black"
-    8 -> "grey"
-    _ -> "whitesmoke"
