@@ -192,8 +192,7 @@ revealCell grid stateRef index = do
     let (Cell _ square state typ) = cells grid V.! index
     case state of
         -- cell should only be updated if it is currently hidden
-        Hidden -> do
-            case typ of
+        Hidden -> case typ of
                 -- if bomb revealed, game over
                 Bomb -> do
                     fillBombs GameOver (cells grid)  -- reveal all bombs

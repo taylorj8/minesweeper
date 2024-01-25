@@ -28,7 +28,7 @@ solve gridRef stateRef currentRef moveRef probText = do
         GameStart _ -> do
             clickCell (middleIndex grid) gridRef stateRef probText
             return True
-        Playing (_, bombsRemaining) -> do
+        Playing (_, bombsRemaining) ->
             -- if no bombs left, click remaining cells
             if bombsRemaining == 0 then do
                 clickRemaining gridRef stateRef currentRef probText
@@ -53,7 +53,7 @@ solve gridRef stateRef currentRef moveRef probText = do
                                         element probText # set UI.text (show (round (prob*100)) ++ "%")
                                         return False
                                     Naive (_, prob) -> do
-                                        element probText # set UI.text ("~" ++ (show (round (prob*100)) ++ "%"))
+                                        element probText # set UI.text ("~" ++ show (round (prob*100)) ++ "%")
                                         return False
                                     -- otherwise make move
                                     Certain guaranteedCells -> do
@@ -106,9 +106,8 @@ clickRemaining gridRef stateRef currentRef probText = do
 
 -- try to find a move based on logic rules
 -- any moves found are always certain
-findLogicalMove :: IORef Grid -> IORef GameState -> IORef Int-> UI Move
+findLogicalMove :: IORef Grid -> IORef GameState -> IORef Int -> UI Move
 findLogicalMove gridRef stateRef currentRef = do
-    return None
     grid <- liftIO $ readIORef gridRef
     current <- liftIO $ readIORef currentRef
     -- recursively apply rules to each cell
@@ -251,16 +250,18 @@ findProbableMove grid bombsRemaining = do
                         1 -> return $ Certain (others, [])
                         -- if it is lower, find the best cell - cell that touches the most frontier cells
                         -- this should give the best chance of choosing a cell that gives more information
-                        x -> do let bestCell = bestHiddenCell (size grid) others frontierCells in
-                                    return $ Uncertain (bestCell, x)
+                        x -> let bestCell = bestHiddenCell grid others frontierCells in
+                                 return $ Uncertain (bestCell, x)
             else return $ Uncertain (cell, prob)
 
 
 -- pick the cell that neigbours the most frontier cells
-bestHiddenCell :: Int -> [Int] -> [Int] -> Int
-bestHiddenCell n others frontierCells = maximumBy (comparing countNeighbours) others
+bestHiddenCell :: Grid -> [Int] -> [Int] -> Int
+bestHiddenCell grid others frontierCells = maximumBy (comparing countNeighbours) others
     where
-        countNeighbours x = length $ filter (`elem` findNeighbours x n) frontierCells
+        countNeighbours i = length (filter (`elem` findNeighbours i (size grid)) frontierCells)
+            + length (filter (stateIs Flagged) $ getNeighbours grid i)
+
 
 
 -- get indices of frontier cells along with number of other hidden cells
@@ -276,9 +277,9 @@ getFrontier grid = do
     let frontierNeighbours = nub . filter (stateIs Revealed) $ concatMap (getNeighbours grid) frontierIndexes
     (frontierIndexes, frontierNeighbours, others)
     where
-        hasRevealedNeighbour index = do
+        hasRevealedNeighbour index =
             -- get neighbours of a cell and return true if any are revealed
-            let neighbours = getNeighbours grid index
+            let neighbours = getNeighbours grid index in
             any (stateIs Revealed) neighbours
 
 
@@ -385,7 +386,7 @@ findValidArrangements availableCells remainingBombs frontierNeighbours = do
 -- returns index mapped to probability
 -- Integer and Rational used to avoid overflow
 calculateProbabilities :: [[Int]] -> Int -> Int -> [(Int, Rational)]
-calculateProbabilities arrangements remainingBombs numOthers = do
+calculateProbabilities arrangements remainingBombs numOthers =
     if length arrangements == 1 then zip (head arrangements) (repeat 1)
     else do
         -- for each arrangement, get the number of ways to arrange the remaining bombs
